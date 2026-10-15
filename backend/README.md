@@ -1069,3 +1069,73 @@ supports only `"active"` and defaults to that value. The unique compound
 index `{ student: 1, course: 1 }` prevents duplicate enrollment records for
 the same student and course. Mongoose also manages `createdAt` and
 `updatedAt`.
+
+## Controller Implementation Notes
+
+These notes explain the Mongoose and MongoDB query options called out in
+controller comments and describe how they affect the responses in the
+endpoints above.
+
+### Selecting, sorting, and returning query results
+
+The course and subject controllers use these Mongoose query helpers:
+
+- `.select("fieldA fieldB")` limits the fields returned from MongoDB. Fields
+  not selected are omitted from the response unless Mongoose includes them by
+  default (for example, `_id`).
+- `.sort({ field: 1 })` sorts in ascending order; `.sort({ field: -1 })` sorts
+  in descending order. For example, active courses are sorted by `classLevel`
+  ascending, while subjects are sorted by `displayOrder` ascending.
+- `.lean()` returns plain JavaScript objects rather than full Mongoose
+  documents. This is useful for read-only responses where document methods and
+  change tracking are not needed.
+
+These are query/response behaviors, not schema changes: using `.select()` does
+not remove fields from the stored record, and `.lean()` does not update the
+database.
+
+### MongoDB comparison operators
+
+The teacher controller comments list common MongoDB comparison operators:
+
+| Operator | Meaning |
+|---|---|
+| `$eq` | Equal to |
+| `$ne` | Not equal to |
+| `$gt` | Greater than |
+| `$lt` | Less than |
+| `$gte` | Greater than or equal to |
+| `$lte` | Less than or equal to |
+
+In the current teacher profile update query, `$ne` excludes the authenticated
+teacher's own document while checking whether another teacher already uses the
+requested email:
+
+```js
+{
+  email: updatedEmail,
+  _id: { $ne: currentTeacherId }
+}
+```
+
+The other operators above are included as a general reference; this does not
+mean each one is used by the currently documented endpoints.
+
+### Chapter update query options
+
+Chapter updates use `findOneAndUpdate()` with a filter for the chapter ID,
+authenticated owner, and `isArchived: false`.
+
+- `returnDocument: "after"` asks Mongoose to return the document after the
+  update, so the success response contains the updated values. Mongoose's
+  commonly used `{ new: true }` option serves the same purpose.
+- `runValidators: true` runs applicable schema validators for updated values,
+  such as the title length, description maximum length, and minimum chapter
+  order. This does not replace the controller's request validation.
+- The owner and archive filters are part of the update query itself. If no
+  document matches all of them, the controller returns `404` rather than
+  updating a different teacher's chapter or an archived chapter.
+
+Refer to the chapter update caveat above before sending PATCH requests:
+the current controller's field checks do not fully match the optional update
+fields advertised by the route.
