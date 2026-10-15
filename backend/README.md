@@ -559,7 +559,12 @@ A student cannot enroll in the same course multiple times:
 | GET | `/courses` | Fetch all active courses | No |
 | GET | `/courses/:courseId` | Fetch one active course by ID | No |
 | GET | `/courses/:courseId/subjects` | Fetch all active subjects for a course | No |
-| GET | `/subjects/:subjectId` | Fetch one active subject by ID | No |
+| GET | `/courses/subjects/:subjectId` | Fetch one active subject by ID | No |
+
+The application mounts the same course router at both `/courses` and `/subjects`.
+The `/courses` paths above are the canonical paths. The additional `/subjects`
+mount also exposes less intuitive aliases, including
+`GET /subjects/subjects/:subjectId` for looking up a subject by ID.
 
 ## Course Controller Behavior
 
@@ -617,7 +622,7 @@ curl -X GET http://localhost:5000/courses/64f1c5d2b7b4a1234567890a/subjects
 ### Get one subject by ID
 
 ```bash
-curl -X GET http://localhost:5000/subjects/64f1c5d2b7b4a1234567890d
+curl -X GET http://localhost:3000/courses/subjects/64f1c5d2b7b4a1234567890d
 ```
 
 ## Example Success Response: Get All Courses
@@ -711,5 +716,356 @@ curl -X GET http://localhost:5000/subjects/64f1c5d2b7b4a1234567890d
 - The auth system currently relies on cookie-based auth, so front-end clients must allow cookies and use the same domain/session context.
 - Course and subject APIs are currently read-only and return only active records.
 - The route setup in [backend/app.js](C:/Users/Varad/Desktop/edupilot/backend/app.js) mounts `/courses` and also reuses the same router for `/subjects`, which is why subject routes can be accessed through both patterns.
+- The current server entry point listens on port `3000`. Replace the port in examples only if the server is configured to listen on a different port.
 
 This documentation reflects the current backend implementation and routes defined in the codebase.
+
+## Teacher Profile and Chapter APIs
+
+The teacher profile and chapter endpoints are mounted under `/teachers` and
+`/teachers/chapters`. Both route groups require an authenticated teacher.
+Authentication is cookie-based: first log in through `/auth/teacher/login`, then
+send the resulting `token` cookie with each protected request. The middleware
+verifies the JWT using `JWT_SECRET`, checks that its role is `teacher`, and
+loads the teacher document for the controller.
+
+For local development, the server entry point listens on port `3000`:
+
+```text
+http://localhost:3000
+```
+
+### Teacher routes
+
+| Method | Endpoint | Description | Auth required |
+|---|---|---|---|
+| GET | `/teachers/me` | Retrieve the authenticated teacher profile | Yes |
+| PATCH | `/teachers/update` | Update one or more profile fields | Yes |
+
+#### Get the current teacher
+
+```http
+GET /teachers/me
+```
+
+Example:
+
+```bash
+curl -i http://localhost:3000/teachers/me -b cookies.txt
+```
+
+A successful response has `status: "success"`, a message, and the teacher
+document in `data`. The current controller returns the full document rather
+than excluding its password field. Treat the returned record as sensitive and
+do not expose it to other users or log it. A missing teacher record returns
+`404`; an internal failure returns `500`.
+
+#### Update the current teacher
+
+```http
+PATCH /teachers/update
+Content-Type: application/json
+```
+
+The body may contain one or more of these fields:
+
+| Field | Validation and handling |
+|---|---|
+| `firstName` | String with at least 4 non-whitespace characters; trimmed before saving |
+| `lastName` | String with at least 2 non-whitespace characters; trimmed before saving |
+| `email` | Valid email format; trimmed, converted to lowercase, and rejected with `409` if another teacher uses it |
+| `password` | String of at least 8 characters; hashed with bcrypt before saving |
+
+At least one supported field is required. An empty update returns `400`.
+Successful updates return `data` with the password excluded. Invalid field
+values return `400`, an already-registered email returns `409`, a missing
+teacher returns `404`, and an unexpected error returns `500`.
+
+Example request to update a teacher's name and email:
+
+```bash
+curl -i -X PATCH http://localhost:3000/teachers/update \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"firstName":"Alice","lastName":"Smith","email":"alice.smith@example.com"}'
+```
+
+Example response:
+
+```json
+{
+  "status": "success",
+  "message": "Teacher profile updated successfully.",
+  "data": {
+    "_id": "64f1c5d2b7b4a1234567890b",
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "email": "alice.smith@example.com",
+    "role": "teacher"
+  }
+}
+```
+
+### Chapter routes
+
+| Method | Endpoint | Description | Auth required |
+|---|---|---|---|
+| POST | `/teachers/chapters` | Create a chapter under an active subject | Yes |
+| GET | `/teachers/chapters` | List the authenticated teacher's non-archived chapters | Yes |
+| GET | `/teachers/chapters/:chapterId` | Retrieve one of the teacher's non-archived chapters | Yes |
+| PATCH | `/teachers/chapters/:chapterId` | Update a chapter owned by the teacher | Yes |
+| DELETE | `/teachers/chapters/:chapterId` | Archive a chapter (soft delete) | Yes |
+
+The chapter controller scopes listing, reading, updating, and archiving to the
+authenticated teacher's ID. A teacher cannot read, change, or archive another
+teacher's chapter by supplying its ID. Chapter IDs and subject IDs must be
+valid MongoDB ObjectIds.
+
+#### How the chapter router is assembled
+
+The chapter router declares paths relative to its mount point. In
+`app.js`, it is mounted with:
+
+```js
+app.use("/teachers/chapters", chapterRoutes);
+```
+
+Each route runs `authTeacherMiddleware` before its controller. The router
+declarations therefore resolve to these complete method/path/controller
+combinations:
+
+| Router method and local path | Complete method and path | Controller |
+|---|---|---|
+| `POST /` | `POST /teachers/chapters` | `createChapter` |
+| `GET /` | `GET /teachers/chapters` | `getMyChapters` |
+| `GET /:chapterId` | `GET /teachers/chapters/:chapterId` | `getChapterById` |
+| `PATCH /:chapterId` | `PATCH /teachers/chapters/:chapterId` | `updateChapter` |
+| `DELETE /:chapterId` | `DELETE /teachers/chapters/:chapterId` | `archiveChapter` |
+
+For item routes, Express places the path segment in `req.params.chapterId`.
+For the create route, the controller reads the JSON payload from `req.body`.
+The middleware attaches the authenticated teacher to `req.teacher`, which is
+used to set chapter ownership on creation and enforce ownership on subsequent
+chapter operations. There are no public chapter routes in this router.
+
+### Chapter model
+
+Each chapter belongs to a `Subject` and records the `Teacher` who created it.
+The schema contains:
+
+| Field | Type | Rules and defaults |
+|---|---|---|
+| `title` | String | Required, trimmed, 2–150 characters |
+| `description` | String | Optional; defaults to `""`, trimmed, maximum 2,000 characters |
+| `subjectId` | ObjectId reference to `Subject` | Required and indexed |
+| `createdBy` | ObjectId reference to `Teacher` | Required and indexed; set from the authenticated teacher, not from the request body |
+| `order` | Number | Required, minimum `1`; unique for each `subjectId` |
+| `status` | String | `"draft"` or `"published"`; defaults to `"draft"` |
+| `isArchived` | Boolean | Defaults to `false`; archived chapters are excluded from teacher reads |
+| timestamps | Dates | Mongoose manages `createdAt` and `updatedAt` |
+
+The compound unique index `{ subjectId: 1, order: 1 }` means two chapters
+cannot have the same order number within one subject. The same order number
+can be used in a different subject. Archiving sets `isArchived` to `true`;
+it does not permanently remove the MongoDB document.
+
+### Create a chapter
+
+```http
+POST /teachers/chapters
+Content-Type: application/json
+```
+
+Required request properties are `title`, `subjectId`, and `order`.
+`description` is optional. The subject must exist and have `isActive: true`.
+The server sets `createdBy` from the authenticated teacher and starts the new
+chapter in `draft` status with `isArchived: false`.
+
+Example request:
+
+```bash
+curl -i -X POST http://localhost:3000/teachers/chapters \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"title":"Kinematics","description":"Position, velocity, and acceleration","subjectId":"64f1c5d2b7b4a1234567890d","order":1}'
+```
+
+Example success response (`201 Created`):
+
+```json
+{
+  "status": "success",
+  "message": "Chapter created successfully.",
+  "data": {
+    "_id": "64f1c5d2b7b4a1234567890f",
+    "title": "Kinematics",
+    "description": "Position, velocity, and acceleration",
+    "subjectId": "64f1c5d2b7b4a1234567890d",
+    "createdBy": "64f1c5d2b7b4a1234567890b",
+    "order": 1,
+    "status": "draft",
+    "isArchived": false
+  }
+}
+```
+
+Missing required properties or invalid values return `400`. A malformed
+subject ID returns `400`; a subject that is missing or inactive returns
+`404`. An order conflict for the same subject is subject to the database's
+unique index and is not given a dedicated conflict response by the controller.
+
+### List and retrieve chapters
+
+List the signed-in teacher's active (not archived) chapters:
+
+```bash
+curl -i http://localhost:3000/teachers/chapters -b cookies.txt
+```
+
+The list is sorted by `order` ascending and returns a `count` and a `data`
+array. Each chapter's `subjectId` is populated with the subject's `name`,
+`code`, and `courseId`.
+
+Retrieve a single chapter:
+
+```bash
+curl -i http://localhost:3000/teachers/chapters/64f1c5d2b7b4a1234567890f \
+  -b cookies.txt
+```
+
+The single-item response also contains the populated subject. An invalid ID
+returns `400`; a chapter that does not exist, is archived, or belongs to
+another teacher returns `404`.
+
+Example list response:
+
+```json
+{
+  "status": "success",
+  "count": 1,
+  "data": [
+    {
+      "_id": "64f1c5d2b7b4a1234567890f",
+      "title": "Kinematics",
+      "description": "Position, velocity, and acceleration",
+      "subjectId": {
+        "_id": "64f1c5d2b7b4a1234567890d",
+        "name": "Mechanics",
+        "code": "PHY101",
+        "courseId": "64f1c5d2b7b4a1234567890a"
+      },
+      "order": 1,
+      "status": "draft",
+      "isArchived": false
+    }
+  ]
+}
+```
+
+### Update a chapter
+
+Only `title`, `description`, `order`, and `status` are accepted in the JSON
+body. `status` must be either `"draft"` or `"published"`. The chapter must
+belong to the current teacher and must not already be archived.
+
+Example request to publish the chapter and set its order:
+
+```bash
+curl -i -X PATCH http://localhost:3000/teachers/chapters/64f1c5d2b7b4a1234567890f \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"order":1,"status":"published"}'
+```
+
+Successful updates return `200` and the updated chapter in `data`. Invalid
+chapter IDs, empty bodies, unsupported properties, and invalid field values
+return `400`. A chapter that is missing, archived, or owned by a different
+teacher returns `404`.
+
+**Current implementation caveat:** although the route accepts `order` as an
+optional update field and accepts `description`, the current controller's
+validation means a PATCH request must include a valid `order`; a request that
+updates `description` currently fails with `500`. Until that validation is
+corrected, include `order` in every PATCH request and do not send
+`description`.
+
+### Archive a chapter
+
+The `DELETE` route performs a soft archive, not a permanent delete:
+
+```bash
+curl -i -X DELETE http://localhost:3000/teachers/chapters/64f1c5d2b7b4a1234567890f \
+  -b cookies.txt
+```
+
+On success the response is `200` with `isArchived: true` in `data`. The
+chapter is no longer returned by the teacher's list or single-chapter
+endpoint. An invalid ID returns `400`; a missing, already archived, or
+another teacher's chapter returns `404`.
+
+### Protected-route errors
+
+All teacher routes use `authTeacherMiddleware`:
+
+| HTTP status | Meaning |
+|---|---|
+| `401` | The `token` cookie is missing or its JWT is invalid/expired |
+| `403` | The token is valid but its role is not `teacher` |
+| `400` | The endpoint received an invalid ID, body, or field value |
+| `404` | The requested teacher, subject, or teacher-owned chapter was not found |
+| `409` | The requested teacher email is already registered |
+| `500` | An unexpected server/database error occurred |
+
+### Complete teacher workflow example
+
+The following sequence logs in a teacher while saving the cookie, creates a
+chapter for an existing active subject, lists that teacher's chapters, then
+publishes the new chapter. Replace the example IDs and credentials with records
+in your database.
+
+```bash
+# 1. Log in and save the token cookie.
+curl -i -X POST http://localhost:3000/auth/teacher/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{"email":"alice@example.com","password":"correct-horse-battery"}'
+
+# 2. Create a chapter in an active subject.
+curl -i -X POST http://localhost:3000/teachers/chapters \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"title":"Kinematics","description":"Motion fundamentals","subjectId":"64f1c5d2b7b4a1234567890d","order":1}'
+
+# 3. View the authenticated teacher's chapters.
+curl -i http://localhost:3000/teachers/chapters -b cookies.txt
+
+# 4. Publish the chapter. Include order in the PATCH body as noted above.
+curl -i -X PATCH http://localhost:3000/teachers/chapters/64f1c5d2b7b4a1234567890f \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"order":1,"status":"published"}'
+```
+
+## Data Models Without Routes in This API
+
+The `Class` and `CourseEnrollment` schemas are present in the backend, but no
+class or enrollment routes are mounted in the current `app.js`. The model
+definitions describe stored data only; they do not imply that clients can
+create or query these records through an HTTP endpoint.
+
+### Class schema details
+
+In addition to the fields listed above, `className`, `description`, `subject`,
+and `classCode` are required. `description` has a default empty string even
+though it is marked required. `classCode` is unique, trimmed, and converted to
+uppercase. `teacher` is a required ObjectId reference to `Teacher`; `isActive`
+defaults to `true`.
+
+### Course enrollment schema details
+
+`student` and `course` are required ObjectId references to `Student` and
+`Course`. `enrolledAt` defaults to the current date/time. `status` currently
+supports only `"active"` and defaults to that value. The unique compound
+index `{ student: 1, course: 1 }` prevents duplicate enrollment records for
+the same student and course. Mongoose also manages `createdAt` and
+`updatedAt`.
