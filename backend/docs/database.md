@@ -11,7 +11,10 @@ CourseEnrollment.
 erDiagram
     COURSE ||--o{ SUBJECT : contains
     SUBJECT ||--o{ CHAPTER : contains
+    CHAPTER ||--o{ LESSON : contains
     TEACHER ||--o{ CHAPTER : creates
+    TEACHER ||--o{ LESSON : creates
+    LESSON }o--o{ LESSON : prerequisites
     TEACHER ||--o{ CLASS : teaches
     STUDENT ||--o{ COURSE_ENROLLMENT : enrolls
     COURSE ||--o{ COURSE_ENROLLMENT : has
@@ -29,16 +32,16 @@ courses. The `Class.subject` field is plain text, not a Mongoose reference.
 | Course | `courses` | `backend/model/course.model.js` | Class-level academic course |
 | Subject | `subjects` | `backend/model/subject.model.js` | Subject belonging to a course |
 | Chapter | `chapters` | `backend/model/chapter.model.js` | Teacher-authored chapter belonging to a subject |
+| Lesson | `lessons` | `backend/model/lesson.model.js` | Ordered teaching unit inside a chapter, with AI and publication metadata |
 | Class | `classes` | `backend/model/class.model.js` | Class record associated with a teacher |
 | CourseEnrollment | `courseenrollments` | `backend/model/enrollment.model.js` | Student-course enrollment relation |
 
 Collection names are Mongoose's standard pluralized names inferred from the
 model names; no explicit collection names are configured.
 
-`backend/model/lesson.model.js` currently contains only an empty schema
-declaration. It does not define or export a Mongoose model and is not used by
-any controller or route, so it does not currently correspond to a usable
-database model or API.
+`backend/model/lesson.model.js` is active code and is used by the teacher
+lesson routes and controller. The schema supports chapter-scoped lesson
+ordering, prerequisites, AI indexing state, and publication status.
 
 ## Account models
 
@@ -115,6 +118,45 @@ within each subject. Since archived documents remain stored and keep their
 index entry, an archived chapter's order cannot be reused in that subject
 unless the archived record's order is changed or the record is removed through
 some other database operation.
+
+## Lesson
+
+Source: `backend/model/lesson.model.js`.
+
+| Field | Type | Required/default | Validation and constraints |
+|---|---|---|---|
+| `title` | String | Required | Trimmed; 3–150 characters |
+| `description` | String | Defaults to `""` | Trimmed; maximum 2,000 characters |
+| `chapterId` | ObjectId → Chapter | Required | Indexed; lesson belongs to a teacher-owned chapter |
+| `createdBy` | ObjectId → Teacher | Required | Indexed; the lesson owner |
+| `order` | Number | Required | Positive integer; unique within a chapter |
+| `estimatedDuration` | Number | Defaults to `0` | Non-negative |
+| `difficulty` | String | Defaults to `"intermediate"` | One of `beginner`, `intermediate`, `advanced` |
+| `learningObjectives` | String[] | Defaults to `[]` | Array of lesson goals |
+| `topics` | String[] | Defaults to `[]` | Each item trimmed; max 100 chars |
+| `tags` | String[] | Defaults to `[]` | Lowercased, trimmed, max 50 chars each |
+| `prerequisites` | ObjectId[] → Lesson | Optional | Must reference existing teacher-owned lessons |
+| `contentVersion` | Number | Defaults to `1` | Minimum `1`; incremented when AI-relevant fields change |
+| `aiContext.language` | String | Defaults to `"en"` | Plain language code |
+| `aiContext.syllabus` | String | Defaults to `"JEE"` | Syllabus identifier |
+| `aiContext.learningLevel` | String | Defaults to `"mixed"` | One of `foundation`, `jee-main`, `jee-advanced`, `mixed` |
+| `aiContext.taxonomyNodeIds` | String[] | Defaults to `[]` | Optional taxonomy IDs |
+| `aiProcessing.status` | String | Defaults to `"not_started"` | One of `not_started`, `pending`, `processing`, `completed`, `failed`, `stale` |
+| `aiProcessing.indexedVersion` | Number | Defaults to `0` | Non-negative |
+| `aiProcessing.lastProcessedAt` | Date | `null` | Last successful AI processing time |
+| `aiProcessing.lastError` | String | `null` | Error summary capped at 1,000 chars |
+| `status` | String | Defaults to `"draft"` | One of `draft` or `published` |
+| `publishedAt` | Date | `null` | Set when the lesson is published |
+| `isArchived` | Boolean | Defaults to `false` | Soft-delete flag; used in teacher reads and filtering |
+| `createdAt`, `updatedAt` | Date | Automatic | Mongoose timestamps |
+
+Index highlights:
+
+- `{ chapterId: 1, order: 1 }` is unique, so the lesson order is valid within a chapter.
+- `{ createdBy: 1, chapterId: 1, isArchived: 1, order: 1 }` supports teacher dashboard ordering.
+- `{ topics: 1, status: 1 }` supports topic-based discovery.
+
+The schema intentionally separates content metadata from AI processing state, which lets the app mark lessons stale when AI-relevant fields are changed before reprocessing.
 
 ## Class
 

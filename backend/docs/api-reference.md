@@ -11,6 +11,7 @@ cookie, not a documented bearer-token header.
 - [Public course and subject catalog](#public-course-and-subject-catalog)
 - [Teacher profile](#teacher-profile)
 - [Teacher chapters](#teacher-chapters)
+- [Teacher lessons](#teacher-lessons)
 - [Response conventions and caveats](#response-conventions-and-caveats)
 
 ## Authentication
@@ -276,6 +277,186 @@ Sets `isArchived` to `true`; it does not delete the document. Success returns
 `200` with the archived chapter. Invalid ID returns `400`; missing, already
 archived, or non-owned chapter returns `404`; database failure returns `500`.
 Archived chapters are excluded from teacher list and item reads.
+
+## Teacher lessons
+
+All lesson routes require a teacher token. They are registered in
+`backend/routes/lesson.routes.js`, mounted at `/teachers/lessons`, and
+implemented by `backend/controller/lesson.controller.js`.
+
+| Method | Exact route | Purpose |
+|---|---|---|
+| POST | `/teachers/lessons` | Create a lesson inside an owned chapter |
+| GET | `/teachers/lessons` | List the current teacher's non-archived lessons |
+| GET | `/teachers/lessons/chapter/:chapterId` | List lessons inside one owned chapter |
+| GET | `/teachers/lessons/:lessonId` | Retrieve one owned lesson |
+| PATCH | `/teachers/lessons/:lessonId` | Update supported lesson metadata |
+| PATCH | `/teachers/lessons/:lessonId/publish` | Publish a lesson |
+| PATCH | `/teachers/lessons/:lessonId/unpublish` | Move the lesson back to `draft` |
+| DELETE | `/teachers/lessons/:lessonId` | Soft archive a lesson |
+
+### Supported lesson fields
+
+The create and update flows accept these fields when present:
+
+- `title`: 3–150 characters after trim
+- `description`: string; maximum 2,000 characters
+- `chapterId`: valid Mongo ObjectId for an owned chapter
+- `order`: positive integer unique within the chapter
+- `estimatedDuration`: non-negative number
+- `difficulty`: `beginner`, `intermediate`, or `advanced`
+- `learningObjectives`: array of strings
+- `topics`: array of strings
+- `tags`: array of strings
+- `prerequisites`: array of valid Lesson ObjectIds belonging to the same teacher
+- `aiContext`: object containing `language`, `syllabus`, `learningLevel`, and optional `taxonomyNodeIds`
+
+The current controller uses a fixed `editableFields` allowlist and rejects any
+other property names.
+
+### `POST /teachers/lessons`
+
+Required request data includes `title`, `description`, `chapterId`, and
+`order`. The route verifies that the chapter exists, belongs to the logged-in
+teacher, and is not archived.
+
+Example request:
+
+```http
+POST /teachers/lessons
+Content-Type: application/json
+Cookie: token=<teacher-jwt>
+
+{
+  "title": "Newton's Laws of Motion",
+  "description": "Introduces force, inertia, and acceleration in mechanics.",
+  "chapterId": "64f1c5d2b7b4a1234567890f",
+  "order": 2,
+  "estimatedDuration": 35,
+  "difficulty": "beginner",
+  "learningObjectives": [
+    "Define force",
+    "Explain inertia",
+    "Connect acceleration to net force"
+  ],
+  "topics": ["Mechanics", "Forces"],
+  "tags": ["jee", "physics"],
+  "prerequisites": ["64f1c5d2b7b4a1234567890e"],
+  "aiContext": {
+    "language": "en",
+    "syllabus": "JEE",
+    "learningLevel": "jee-main",
+    "taxonomyNodeIds": ["phy-force-01", "phy-motion-02"]
+  }
+}
+```
+
+On success, the API responds with `201` and a lesson object similar to:
+
+```json
+{
+  "status": "success",
+  "message": "Lesson created successfully.",
+  "data": {
+    "_id": "64f1c5d2b7b4a12345678911",
+    "title": "Newton's Laws of Motion",
+    "description": "Introduces force, inertia, and acceleration in mechanics.",
+    "chapterId": "64f1c5d2b7b4a1234567890f",
+    "createdBy": "64f1c5d2b7b4a1234567890b",
+    "order": 2,
+    "estimatedDuration": 35,
+    "difficulty": "beginner",
+    "learningObjectives": [
+      "Define force",
+      "Explain inertia",
+      "Connect acceleration to net force"
+    ],
+    "topics": ["Mechanics", "Forces"],
+    "tags": ["jee", "physics"],
+    "prerequisites": ["64f1c5d2b7b4a1234567890e"],
+    "status": "draft",
+    "aiContext": {
+      "language": "en",
+      "syllabus": "JEE",
+      "learningLevel": "jee-main",
+      "taxonomyNodeIds": ["phy-force-01", "phy-motion-02"]
+    },
+    "isArchived": false,
+    "contentVersion": 1,
+    "aiProcessing": {
+      "status": "not_started",
+      "indexedVersion": 0,
+      "lastProcessedAt": null,
+      "lastError": null
+    }
+  }
+}
+```
+
+Invalid chapter IDs, invalid order values, duplicate lesson orders, or
+missing/invalid prerequisite lesson IDs return `400`. Non-owned or missing
+chapters return `404`; duplicate-order MongoDB errors are converted to `409`.
+
+### `GET /teachers/lessons`, `GET /teachers/lessons/chapter/:chapterId`, and `GET /teachers/lessons/:lessonId`
+
+The list routes are filtered by `createdBy: req.teacher._id` and
+`isArchived: false`. Pagination is supported for `/teachers/lessons` via
+`page` and `limit` query parameters, with a default of `page=1` and
+`limit=20`. `GET /teachers/lessons/chapter/:chapterId` returns all lessons in
+one owned chapter in ascending `order` sequence. Items and list responses are
+populated with the chapter metadata (`title`, `subjectId`, and `order`) and
+prerequisite lesson summaries (`title` and `order`).
+
+### `PATCH /teachers/lessons/:lessonId`
+
+The update route accepts only the supported lesson fields listed above. The
+controller also checks duplicate prerequisite IDs and ensures a lesson does not
+reference itself.
+
+Example valid update:
+
+```http
+PATCH /teachers/lessons/64f1c5d2b7b4a12345678911
+Content-Type: application/json
+Cookie: token=<teacher-jwt>
+
+{
+  "title": "Newton's Laws and Applications",
+  "estimatedDuration": 40,
+  "tags": ["jee", "physics", "mechanics"]
+}
+```
+
+When AI-relevant fields change (`title`, `description`, `learningObjectives`,
+`topics`, `tags`, or `aiContext`), the code increments `contentVersion` and
+marks `aiProcessing.status` as `stale` so downstream AI processing can refresh
+indexing.
+
+### `PATCH /teachers/lessons/:lessonId/publish` and `PATCH /teachers/lessons/:lessonId/unpublish`
+
+Publishing sets `status` to `published` and `publishedAt` to the current time.
+Unpublishing resets `status` to `draft` and clears `publishedAt`. Both routes
+require an existing, non-archived, teacher-owned lesson. Publishing also checks
+that the lesson has a non-empty title and a valid chapterId.
+
+### `DELETE /teachers/lessons/:lessonId`
+
+Soft archives the lesson by setting `isArchived: true`, `status: "draft"`, and
+`publishedAt: null`. The document is not physically removed from MongoDB.
+
+### Current implementation caveats
+
+The lesson controller is active but still contains several runtime rough edges
+that are important to document when integrating with the API:
+
+- `createLesson` validates `prerequisites` only if the field is present, but the
+  later code still calls `prerequisites.some(...)` unconditionally; omitting the
+  field can therefore trigger a runtime error in the current implementation.
+- `updateLesson` uses several misspelled identifiers (`isValidStirng`,
+  `mogoose`, and `new set`) and should be treated as brittle until corrected.
+- The controller does not centralize all validation errors through a single
+  error wrapper; MongoDB duplicate-key and Mongoose validation failures are
+  handled in place.
 
 ## Response conventions and caveats
 

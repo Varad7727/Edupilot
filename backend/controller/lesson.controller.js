@@ -358,11 +358,13 @@ const getLessonById = async (req, res) => {
 }
 
 // UPDATE LESSON METADATA
+
 const updateLesson = async (req, res) => {
     try {
-        const { lessonId } = req.params
-        const fields = Object.keys(req.body)
+        const { lessonId } = req.params;
+        const fields = Object.keys(req.body);
 
+        // Validate lesson ID
         if (!mongoose.isValidObjectId(lessonId)) {
             return res.status(400).json({
                 status: "failed",
@@ -370,20 +372,23 @@ const updateLesson = async (req, res) => {
             });
         }
 
-        //validate fields
-        if (fields.length === 0 ||
-            fields.some(field => !editableFields.includes(field))) {
+        // Validate editable fields
+        if (
+            fields.length === 0 ||
+            fields.some(field => !editableFields.includes(field))
+        ) {
             return res.status(400).json({
                 status: "failed",
                 message: "Provide only supported lesson fields."
             });
         }
-        //retrieve lesson
+
+        // Retrieve lesson owned by this teacher
         const lesson = await lessonModel.findOne({
             _id: lessonId,
             createdBy: req.teacher._id,
             isArchived: false
-        })
+        });
 
         if (!lesson) {
             return res.status(404).json({
@@ -391,96 +396,133 @@ const updateLesson = async (req, res) => {
                 message: "Lesson not found or access denied."
             });
         }
-        //The ... is called the spread operator here. It copies the enumerable properties of an object into another object.
-        //  req.body contains the data sent by the client in the request, usually when using a POST, PUT, or PATCH API. 
-        const updates = { ...req.body }
+
+        // Copy request body to avoid modifying req.body
+        const updates = { ...req.body };
+
+        // Validate title
         if (updates.title !== undefined) {
-            if (!isValidStirng(updates.title, 3, 150)) {
+            if (!isValidString(updates.title, 3, 150)) {
                 return res.status(400).json({
                     status: "failed",
                     message: "Title must contain 3 to 150 characters."
                 });
             }
-            updates.title = updates.title.trim()
+
+            updates.title = updates.title.trim();
         }
 
+        // Validate description
         if (updates.description !== undefined) {
             if (
-                typeof updates.description !== 'string' ||
-                updates.description.length > 2000
+                typeof updates.description !== "string" ||
+                updates.description.trim().length > 2000
             ) {
                 return res.status(400).json({
                     status: "failed",
                     message: "Invalid description."
                 });
-                updates.description = updates.description.trim()
             }
+
+            updates.description = updates.description.trim();
         }
+
+        // Validate order
         if (updates.order !== undefined) {
-            if (!Number.isInteger(updates.order) || updates.order < 1) {
+            if (
+                !Number.isInteger(updates.order) ||
+                updates.order < 1
+            ) {
                 return res.status(400).json({
                     status: "failed",
                     message: "Order must be a positive integer."
                 });
             }
         }
+
+        // Validate estimated duration
         if (updates.estimatedDuration !== undefined) {
-            if (!Number.isFinite(updates.estimatedDuration) || updates.estimatedDuration < 0) {
+            if (
+                typeof updates.estimatedDuration !== "number" ||
+                !Number.isFinite(updates.estimatedDuration) ||
+                updates.estimatedDuration < 0
+            ) {
                 return res.status(400).json({
                     status: "failed",
                     message: "Invalid estimated duration."
                 });
             }
         }
+
+        // Validate difficulty
         if (updates.difficulty !== undefined) {
-            if (!["beginner", "intermediate", "advanced"].includes(updates.difficulty)) {
+            if (
+                !["beginner", "intermediate", "advanced"]
+                    .includes(updates.difficulty)
+            ) {
                 return res.status(400).json({
                     status: "failed",
                     message: "Invalid difficulty."
                 });
             }
         }
+
+        // Validate prerequisites only when supplied
         if (updates.prerequisites !== undefined) {
-            if (!Array.isArray(updates.prerequisites) ||
-                updates.prerequisites.some(id => !mogoose.isValidObjectId(id))) {
+            if (
+                !Array.isArray(updates.prerequisites) ||
+                updates.prerequisites.some(
+                    id => !mongoose.isValidObjectId(id)
+                )
+            ) {
                 return res.status(400).json({
                     status: "failed",
                     message: "Invalid prerequisites."
                 });
             }
-            //lesson cant be its own prerequisite
-            if (updates.prerequisites.some(id => String(id) === String(lesson._id))) {
+
+            // A lesson cannot depend on itself
+            if (
+                updates.prerequisites.some(
+                    id => String(id) === String(lesson._id)
+                )
+            ) {
                 return res.status(400).json({
                     status: "failed",
                     message: "A lesson cannot be its own prerequisite."
                 });
             }
-        }
-        //retrieve id
-        const ids = [... new set(
-            updates.prerequisites.map(string)
-        )]
-        if (ids.length !== updates.prerequisites.length) {
-            return res.status(400).json({
-                status: "failed",
-                message: "Duplicate prerequisites are not allowed."
-            });
-        }
-        const count = await lessonModel.countDocuments({
-            _id: { $in: ids },
-            createdBy: req.teacher._id,
-            isArchived: false
-        });
 
-        if (count !== ids.length) {
-            return res.status(400).json({
-                status: "failed",
-                message: "A prerequisite is missing or inaccessible."
+            // Remove duplicate prerequisite IDs
+            const ids = [
+                ...new Set(updates.prerequisites.map(String))
+            ];
+
+            if (ids.length !== updates.prerequisites.length) {
+                return res.status(400).json({
+                    status: "failed",
+                    message: "Duplicate prerequisites are not allowed."
+                });
+            }
+
+            // Ensure prerequisite lessons exist and belong to this teacher
+            const count = await lessonModel.countDocuments({
+                _id: { $in: ids },
+                createdBy: req.teacher._id,
+                isArchived: false
             });
+
+            if (count !== ids.length) {
+                return res.status(400).json({
+                    status: "failed",
+                    message: "A prerequisite is missing or inaccessible."
+                });
+            }
+
+            updates.prerequisites = ids;
         }
-        updates.prerequisites = ids;
-        // When source content changes, future AI indexing must
-        // be refreshed. A worker will perform actual processing.
+
+        // Detect changes that require AI reprocessing
         const aiRelevantFields = [
             "title",
             "description",
@@ -489,58 +531,58 @@ const updateLesson = async (req, res) => {
             "tags",
             "aiContext"
         ];
+
         const aiRelevantChange = aiRelevantFields.some(
             field => updates[field] !== undefined
-        )
+        );
+
+        // Build update data
+        const updateData = { ...updates };
 
         if (aiRelevantChange) {
-            updates.$set = {
-                ...updates
-            };
+            updateData.contentVersion =
+                (lesson.contentVersion || 0) + 1;
 
-            delete updates.$set.contentVersion;
-            delete updates.contentVersion;
-
-            updates.$set.contentVersion = lesson.contentVersion + 1;
-            updates.$set["aiProcessing.status"] = "stale";
-            updates.$set["aiProcessing.lastError"] = null;
-
-            delete updates.title;
-            delete updates.description;
-            delete updates.learningObjectives;
-            delete updates.topics;
-            delete updates.tags;
-            delete updates.aiContext;
-            delete updates.order;
-            delete updates.estimatedDuration;
-            delete updates.difficulty;
-            delete updates.prerequisites;
+            updateData["aiProcessing.status"] = "stale";
+            updateData["aiProcessing.lastError"] = null;
         }
 
-        const updatedLesson = await lessonModel.findByIdAndUpdate(
+        // Update lesson while enforcing teacher ownership
+        const updatedLesson = await lessonModel.findOneAndUpdate(
             {
                 _id: lessonId,
                 createdBy: req.teacher._id,
                 isArchived: false
             },
-            { $set: updates.$set || updates },
+            { $set: updateData },
             {
-                returnDocument: "after",
+                new: true,
                 runValidators: true
             }
-        )
+        );
+
+        if (!updatedLesson) {
+            return res.status(404).json({
+                status: "failed",
+                message: "Lesson not found or access denied."
+            });
+        }
+
         return res.status(200).json({
             status: "success",
             message: "Lesson updated successfully.",
             data: updatedLesson
         });
 
-
-
     } catch (error) {
-        return sendError(res, error, "Update lesson error:");
+        return sendError(
+            res,
+            error,
+            "Update lesson error:"
+        );
     }
-}
+};
+
 
 // PUBLISH LESSON
 const publishLesson = async (req, res) => {

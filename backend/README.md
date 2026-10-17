@@ -1,7 +1,7 @@
 # EduPilot Backend
 
 The EduPilot backend provides account authentication, a public course and
-subject catalog, and teacher profile and chapter APIs.
+subject catalog, teacher profile/chapter APIs, and teacher-owned lesson APIs.
 
 ## Technology
 

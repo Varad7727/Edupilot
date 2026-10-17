@@ -19,7 +19,7 @@ can locate behavior quickly.
 | Chapter schema | `backend/model/chapter.model.js` | Subject and Teacher references |
 | Class schema | `backend/model/class.model.js` | Teacher reference; no mounted class route/controller |
 | Enrollment schema | `backend/model/enrollment.model.js` | Student and Course references; no mounted enrollment route/controller |
-| Lesson schema placeholder | `backend/model/lesson.model.js` | Empty schema declaration only; no exported model or route usage |
+| Lesson API and schema | `backend/model/lesson.model.js`, `backend/routes/lesson.routes.js`, `backend/controller/lesson.controller.js` | Teacher-owned lesson CRUD, chapter-scoped listing, publishing lifecycle, and AI metadata tracking |
 | Seed data | `backend/seed/seedCourses.js` | Upserts course and subject catalog records |
 
 ## Key exported operations
@@ -46,6 +46,19 @@ These handlers are read-only and serve active catalog records. See
 
 Chapter operations use the authenticated teacher as the ownership scope. See
 [API reference](./api-reference.md#teacher-chapters).
+
+### Teacher lessons
+
+- `lesson.model.js`: `Lesson` schema with chapter membership, teacher ownership,
+  publishing state, AI indexing metadata, and prerequisites.
+- `lesson.routes.js`: `GET`, `POST`, `PATCH`, and `DELETE` routes mounted at
+  `/teachers/lessons` and protected by the teacher auth middleware.
+- `lesson.controller.js`: `createLesson`, `getMyLessons`, `getLessonById`,
+  `updateLesson`, `publishLesson`, `unpublishLesson`, `archiveLesson`, and
+  `getLessonsByChapter`.
+
+Lesson handlers enforce teacher ownership, chapter validity, and lesson-order
+uniqueness within a chapter. See [API reference](./api-reference.md#teacher-lessons).
 
 ## No separate service or validation packages
 
