@@ -5,6 +5,7 @@ const authRoutes=require('./routes/auth.routes.js');
 const courseRoutes = require("./routes/course.routes.js");
 const teacherRoutes=require("../backend/routes/teacher.routes.js")
 const chapterRoutes = require("./routes/chapter.routes.js");
+const lessonRoutes = require("./routes/lesson.routes.js");
 //const subjectRoutes = require("./routes/subject.routes.js");
     const app=express();
     app.use(cors());
@@ -17,4 +18,5 @@ const chapterRoutes = require("./routes/chapter.routes.js");
     app.use("/subjects", courseRoutes);
     app.use("/teachers", teacherRoutes);
     app.use("/teachers/chapters", chapterRoutes);
+    app.use("/teachers/lessons", lessonRoutes);
     module.exports=app;
