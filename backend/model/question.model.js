@@ -44,11 +44,6 @@ const markingSchema = new mongoose.Schema({
         required: true,
         default: -1,
     },
-    incorrectMarks: {
-        type: Number,
-        required: true,
-        default: -1,
-    },
     unattemptedMarks: {
         type: Number,
         required: true,
@@ -63,23 +58,23 @@ const markingSchema = new mongoose.Schema({
 //questionschema
 const questionSchema = new mongoose.Schema({
     questionText: {
-        type: text,
+        type: String,
         required: true,
         trim: true,
     },
     questionType: {
-        type: text,
+        type: String,
         enum: ["SINGLE_CORRECT", "MULTIPLE_CORRECT",
             "NUMERICAL",],
         required: true,
     },
-    option: {
+    options: {
         type: [optionSchema],
         default: [],
     },
     // Used for MCQ question types
-    correctOption: {
-        type: [string],
+    correctOptions: {
+        type: [String],
         default: [],
     },
     // Used for numerical questions
@@ -131,7 +126,7 @@ const questionSchema = new mongoose.Schema({
 
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Teacher",
         required: true,
     },
        isActive: {

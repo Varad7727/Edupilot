@@ -201,7 +201,7 @@ const validateQuestion = (data) => {
     }
 
     // 11. Marking configuration
-    const marking = data.marking;
+   const marking = data.marking ?? {};
 
     if (!marking || typeof marking !== "object" || Array.isArray(marking)) {
         errors.push("Marking configuration is required.");
