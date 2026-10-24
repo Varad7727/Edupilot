@@ -269,7 +269,25 @@ const validateQuestion = (data) => {
         }
     }
 
-    // 12. Explanation
+    // 12. Optional question image
+    if (data.image !== undefined && data.image !== null) {
+        if (
+            typeof data.image !== "object" ||
+            Array.isArray(data.image) ||
+            typeof data.image.url !== "string" ||
+            !/^https:\/\//i.test(data.image.url.trim())
+        ) {
+            errors.push("Question image must contain a valid HTTPS URL.");
+        }
+        if (
+            data.image.altText !== undefined &&
+            (typeof data.image.altText !== "string" || data.image.altText.length > 250)
+        ) {
+            errors.push("Image alt text must be a string of at most 250 characters.");
+        }
+    }
+
+    // 13. Explanation
     if (
         data.explanation !== undefined &&
         typeof data.explanation !== "string"
