@@ -5,8 +5,8 @@ const multer = require("multer");
 const router = express.Router();
 
 const { authTeacherMiddleware } = require("../middleware/auth.middleware");
-const { pdfUpload } = require("../middleware/upload.middleware");
-const { uploadPDF } = require("../controller/upload.controller");
+const { pdfUpload, imageUpload } = require("../middleware/upload.middleware");
+const { uploadPDF, uploadQuestionImage } = require("../controller/upload.controller");
 
 // POST /teachers/uploads/pdf
 router.post(
@@ -14,6 +14,14 @@ router.post(
     authTeacherMiddleware,
     pdfUpload.single("file"),
     uploadPDF
+);
+
+// POST /teachers/uploads/image
+router.post(
+    "/image",
+    authTeacherMiddleware,
+    imageUpload.single("file"),
+    uploadQuestionImage
 );
 
 // Handle Multer errors for these upload routes.
