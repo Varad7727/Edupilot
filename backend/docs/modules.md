@@ -19,7 +19,8 @@ can locate behavior quickly.
 | Chapter schema | `backend/model/chapter.model.js` | Subject and Teacher references |
 | Class schema | `backend/model/class.model.js` | Teacher reference; no mounted class route/controller |
 | Enrollment schema | `backend/model/enrollment.model.js` | Student and Course references; no mounted enrollment route/controller |
-| Lesson API and schema | `backend/model/lesson.model.js`, `backend/routes/lesson.routes.js`, `backend/controller/lesson.controller.js` | Teacher-owned lesson CRUD, chapter-scoped listing, publishing lifecycle, and AI metadata tracking |\n| Question bank | `backend/model/question.model.js`, `backend/utils/questionValidation.utils.js`, `backend/routes/question.routes.js`, `backend/controller/question.controller.js` | Teacher-owned question CRUD, validation, filtering, pagination, and soft deactivation |
+| Lesson API and schema | `backend/model/lesson.model.js`, `backend/routes/lesson.routes.js`, `backend/controller/lesson.controller.js` | Teacher-owned lesson CRUD, chapter-scoped listing, publishing lifecycle, and AI metadata tracking |
+| DPP question authoring | `backend/model/question.model.js`, `backend/controller/dpp.controller.js`, `backend/utils/questionValidation.utils.js` | Questions are created inside a draft DPP; optional image metadata is stored on the shared Question model |
 | Seed data | `backend/seed/seedCourses.js` | Upserts course and subject catalog records |
 
 ## Key exported operations
@@ -47,7 +48,15 @@ These handlers are read-only and serve active catalog records. See
 Chapter operations use the authenticated teacher as the ownership scope. See
 [API reference](./api-reference.md#teacher-chapters).
 
-### Teacher question bank\n\n- `questionValidation.utils.js`: validates MCQ/numerical payloads and marking rules.\n- `question.controller.js`: creates, lists, retrieves, updates, and deactivates questions, scoped to the authenticated teacher.\n- `question.routes.js`: protected endpoints mounted at `/teachers/questions`.\n\nSee [API reference](./api-reference.md#teacher-question-bank).\n\n### Teacher lessons
+### DPP question authoring
+
+- `question.model.js`: shared schema for text questions, answer options, marking, and optional image metadata.
+- `dpp.controller.js`: creates questions through `POST /teachers/dpps/:dppId/questions` and attaches them to a draft DPP.
+- `upload.controller.js`: uploads optional question images through `POST /teachers/uploads/image`.
+
+See [API reference](./api-reference.md#dpp-question-creation-and-optional-images).
+
+### Teacher lessons
 
 - `lesson.model.js`: `Lesson` schema with chapter membership, teacher ownership,
   publishing state, AI indexing metadata, and prerequisites.
