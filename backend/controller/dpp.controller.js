@@ -3,6 +3,7 @@ const mongoose = require('mongoose')
 const DPP = require("../model/dpp.model")
 const Chapter = require("../model/chapter.model")
 const Question = require("../model/question.model")
+const { validateQuestion } = require("../utils/questionValidation.utils")
 
 // Helper: get the logged-in teacher's ID.
 const getTeacherId = (req) => req.teacher?._id;
@@ -55,10 +56,10 @@ const createDPP = async (req, res) => {
                 message: "A valid chapter ID is required.",
             });
         }
-        if (!Array.isArray(questions) || questions.length === 0) {
+        if (questions !== undefined && !Array.isArray(questions)) {
             return res.status(400).json({
                 status: "failed",
-                message: "A DPP must contain at least one question.",
+                message: "Questions must be an array.",
             });
         }
         if (
@@ -120,9 +121,10 @@ const createDPP = async (req, res) => {
             });
         }
         // 3. Validate question IDs and their order.
+        const questionList = questions ?? [];
         const questionIds = [];
         const orderValues = [];
-        for (const item of questions) {
+        for (const item of questionList) {
             if (
                 !item ||
                 !mongoose.isValidObjectId(item.questionId) ||
@@ -184,7 +186,7 @@ const createDPP = async (req, res) => {
             ])
         );
         // Preserve the teacher's requested question order.
-        const orderedQuestions = questions.map((item) => ({
+        const orderedQuestions = questionList.map((item) => ({
             questionId: item.questionId,
             order: item.order,
         }));
