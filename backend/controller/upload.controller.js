@@ -79,7 +79,12 @@ const uploadQuestionImage = async (req, res) => {
             bytes.subarray(0, 4).toString() === "RIFF" &&
             bytes.subarray(8, 12).toString() === "WEBP";
 
-        if (!isJpeg && !isPng && !isWebp) {
+        const signatureMatchesMime =
+            (file.mimetype === "image/jpeg" && isJpeg) ||
+            (file.mimetype === "image/png" && isPng) ||
+            (file.mimetype === "image/webp" && isWebp);
+
+        if (!signatureMatchesMime) {
             return res.status(400).json({
                 status: "failed",
                 message: "The uploaded file is not a valid JPEG, PNG, or WebP image.",
