@@ -63,3 +63,79 @@ test("MCQ with duplicate option keys should fail", () => {
         )
     );
 });
+
+test("numerical question requires a finite numerical answer", () => {
+    const question = {
+        ...validQuestion,
+        questionType: "NUMERICAL",
+        options: [],
+        correctOptions: [],
+        numericalAnswer: Number.NaN,
+    };
+
+    const result = validateQuestion(question);
+
+    assert.equal(result.isValid, false);
+    assert.ok(result.errors.some((error) => error.includes("numerical answer")));
+});
+
+test("correct option keys must exist in the options", () => {
+    const question = {
+        ...validQuestion,
+        correctOptions: ["Z"],
+    };
+
+    const result = validateQuestion(question);
+
+    assert.equal(result.isValid, false);
+    assert.ok(result.errors.some((error) => error.includes("must exist")));
+});
+
+test("numerical questions cannot include MCQ options", () => {
+    const question = {
+        ...validQuestion,
+        questionType: "NUMERICAL",
+        numericalAnswer: 12,
+        options: [{ key: "A", text: "12" }],
+        correctOptions: [],
+    };
+
+    const result = validateQuestion(question);
+
+    assert.equal(result.isValid, false);
+    assert.ok(result.errors.some((error) => error.includes("must not contain MCQ options")));
+});
+
+test("negative numerical tolerance should fail", () => {
+    const question = {
+        ...validQuestion,
+        numericalTolerance: -0.1,
+    };
+
+    const result = validateQuestion(question);
+
+    assert.equal(result.isValid, false);
+    assert.ok(result.errors.some((error) => error.includes("non-negative")));
+});
+
+test("multiple-correct questions can define valid partial marking rules", () => {
+    const question = {
+        ...validQuestion,
+        questionType: "MULTIPLE_CORRECT",
+        correctOptions: ["A", "B"],
+        marking: {
+            correctMarks: 4,
+            incorrectMarks: -1,
+            unattemptedMarks: 0,
+            partialMarkingRules: [
+                { selectedOptions: ["A"], marks: 1 },
+                { selectedOptions: ["A", "B"], marks: 4 },
+            ],
+        },
+    };
+
+    const result = validateQuestion(question);
+
+    assert.equal(result.isValid, true);
+    assert.deepEqual(result.errors, []);
+});
