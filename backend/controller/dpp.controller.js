@@ -349,7 +349,26 @@ const addQuestionToDPP = async (req, res) => {
             });
         }
 
-        const data = { ...req.body, chapterId: String(dpp.chapterId) };
+        const allowedFields = [
+            "questionText",
+            "questionType",
+            "options",
+            "correctOptions",
+            "numericalAnswer",
+            "numericalTolerance",
+            "explanation",
+            "image",
+            "difficulty",
+            "subject",
+            "topicTags",
+            "marking",
+        ];
+        const data = Object.fromEntries(
+            allowedFields
+                .filter((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field))
+                .map((field) => [field, req.body[field]])
+        );
+        data.chapterId = String(dpp.chapterId);
         const validation = validateQuestion(data);
         if (!validation.isValid) {
             return res.status(400).json({
