@@ -1,38 +1,37 @@
 # Testing
 
-## Current test setup
+## Test runner
 
-The backend `package.json` defines:
+The backend uses Node.js's built-in test runner. The `backend/package.json`
+test script is `node --test`, so no separate test framework is required.
 
-```json
-"test": "echo \"Error: no test specified\" && exit 1"
+Run from the backend directory:
+
+```bash
+npm test
 ```
 
-There are no application test files or test framework in the backend tree.
-Consequently, `npm test` is a placeholder and exits unsuccessfully; it does
-not run a test suite. No test results or coverage are available to report.
+Or run a focused test file:
 
-## Verified commands
+```bash
+node --test test/questionValidation.test.js
+node --test test/dpp.model.test.js
+```
 
-| Command | Result based on current configuration |
-|---|---|
-| `npm test` | Runs the placeholder above and exits with status 1 |
-| `npm start` | Starts `nodemon server.js`; this is a development server command, not a test |
+The current tests cover question payload validation and DPP Mongoose schema
+validation. They do not require a live MongoDB connection because the model
+tests call Mongoose validation without saving documents.
 
-No lint, build, or coverage scripts are configured.
+## Current coverage and next steps
 
-## Adding tests
+- Question validation: valid payloads, missing correct answer, duplicate
+  option keys, numerical-answer requirements, invalid correct-option keys,
+  numerical-option restrictions, numerical tolerance, and partial-marking rules.
+- DPP schema: required fields, duplicate question IDs/order values, duration
+  bounds, and default draft state.
+- Not yet covered: HTTP/controller integration, authentication cookies,
+  ownership checks against a database, upload behavior, and end-to-end student
+  attempts.
 
-No testing conventions exist yet in this repository. When a test framework is
-introduced, add its dependency and scripts intentionally, then cover the
-existing module boundaries:
-
-- Controller behavior for request validation, status codes, and JSON response
-  shapes.
-- Route registration and middleware protection.
-- Authentication role checks and cookie behavior.
-- Mongoose model validation and unique-index behavior, using isolated test
-  data rather than real user records.
-
-Until a runner is selected and tests are added, do not describe the backend as
-having a passing automated test suite.
+A passing unit test suite is not a substitute for testing against an isolated
+test database and exercising protected routes with real authentication.
