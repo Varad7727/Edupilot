@@ -1,0 +1,47 @@
+
+const express = require("express");
+const multer = require("multer");
+
+const router = express.Router();
+
+const { authTeacherMiddleware } = require("../middleware/auth.middleware");
+const { pdfUpload } = require("../middleware/upload.middleware");
+const { uploadPDF } = require("../controller/upload.controller");
+
+// POST /teachers/uploads/pdf
+router.post(
+    "/pdf",
+    authTeacherMiddleware,
+    pdfUpload.single("file"),
+    uploadPDF
+);
+
+// Handle Multer errors for these upload routes.
+router.use((error, req, res, next) => {
+    if (error instanceof multer.MulterError) {
+        const statusCode =
+            error.code === "LIMIT_FILE_SIZE" ||
+            error.code === "LIMIT_FILE_COUNT"
+                ? 413
+                : 400;
+
+        return res.status(statusCode).json({
+            status: "failed",
+            message:
+                statusCode === 413
+                    ? "The upload exceeds the allowed file limit."
+                    : "The uploaded file could not be accepted.",
+        });
+    }
+
+    if (error) {
+        return res.status(400).json({
+            status: "failed",
+            message: error.message || "Invalid upload.",
+        });
+    }
+
+    next();
+});
+
+module.exports = router;
