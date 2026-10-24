@@ -471,63 +471,58 @@ that are important to document when integrating with the API:
 - Chapter PATCH has the validation defects described above. These are
   documented, not corrected by this documentation-only change.
 
-## Teacher question bank
 
-Question-bank routes are registered in `backend/routes/question.routes.js`, mounted at
-`/teachers/questions`, and require a teacher session cookie. Questions are
-owned by the authenticated teacher and linked to an existing, non-archived
-chapter owned by that teacher. The request cannot set `createdBy`.
+## DPP question creation and optional images
+
+Questions are authored inside the existing DPP workflow. There is no separate
+question-bank route. Create a draft DPP first; it may start with an empty
+`questions` array. Add each question through the nested route below. Questions
+use the shared `Question` model, and the backend assigns the question's
+chapter from the owning DPP.
 
 | Method | Exact route | Purpose |
 |---|---|---|
-| POST | `/teachers/questions` | Create a question |
-| GET | `/teachers/questions` | List the teacher's questions |
-| GET | `/teachers/questions/:questionId` | Retrieve one owned question |
-| PATCH | `/teachers/questions/:questionId` | Update an active owned question |
-| DELETE | `/teachers/questions/:questionId` | Deactivate an active owned question |
+| POST | `/teachers/dpps/:dppId/questions` | Write a question and append it to a draft DPP |
+| POST | `/teachers/uploads/image` | Upload an optional question image to ImageKit |
 
-### Create question
+Both routes require teacher authentication.
 
-Required JSON fields: `questionText`, `questionType`, `difficulty`,
-`subject`, and `chapterId`. The `questionType` is one of
-`SINGLE_CORRECT`, `MULTIPLE_CORRECT`, or `NUMERICAL`; difficulty is
-`EASY`, `MEDIUM`, or `HARD`; subject is `PHYSICS`, `CHEMISTRY`, or
-`MATHEMATICS`.
+### Add a question to a draft DPP
 
-MCQs use `options: [{ "key": "A", "text": "..." }]` and `correctOptions`
-containing the corresponding keys. Single-correct questions require exactly
-one correct key; multiple-correct questions require at least one. Numerical
-questions use `numericalAnswer` and may specify a non-negative
-`numericalTolerance`. Optional `marking` supports correct, incorrect,
-unattempted, and multiple-correct partial-marking values.
+`POST /teachers/dpps/:dppId/questions` accepts JSON fields `questionText`,
+`questionType`, `options`, `correctOptions`, `numericalAnswer`,
+`numericalTolerance`, `explanation`, `difficulty`, `subject`,
+`topicTags`, `marking`, and optional `image`. The server derives
+`chapterId` from the DPP and `createdBy` from the authenticated teacher.
+Questions can be text-only or include an image. Questions can only be added
+while the DPP is a draft.
 
-The server validates question structure and confirms that the chapter belongs
-to the logged-in teacher. The question subject must match the chapter's
-subject name when that name maps to a supported subject value. Success returns
-`201`; invalid question data returns `400`; missing or non-owned chapters
-return `404`.
-
-Example MCQ request:
+Example request:
 
 ```http
-POST /teachers/questions
+POST /teachers/dpps/<draft-dpp-id>/questions
 Content-Type: application/json
 Cookie: token=<teacher-jwt>
 
 {
-  "questionText": "What is 2 + 2?",
+  "questionText": "For the circuit shown, calculate the current through R.",
   "questionType": "SINGLE_CORRECT",
   "options": [
-    { "key": "A", "text": "3" },
-    { "key": "B", "text": "4" },
-    { "key": "C", "text": "5" },
-    { "key": "D", "text": "6" }
+    { "key": "A", "text": "1 A" },
+    { "key": "B", "text": "2 A" },
+    { "key": "C", "text": "3 A" },
+    { "key": "D", "text": "4 A" }
   ],
   "correctOptions": ["B"],
-  "difficulty": "EASY",
-  "subject": "MATHEMATICS",
-  "chapterId": "<owned-chapter-id>",
-  "topicTags": ["arithmetic"],
+  "difficulty": "MEDIUM",
+  "subject": "PHYSICS",
+  "topicTags": ["current-electricity"],
+  "image": {
+    "url": "https://<imagekit-host>/<uploaded-image-path>",
+    "fileId": "<imagekit-file-id>",
+    "filePath": "/edupilot/question-images/example.png",
+    "altText": "Circuit diagram"
+  },
   "marking": {
     "correctMarks": 4,
     "incorrectMarks": -1,
@@ -536,17 +531,19 @@ Cookie: token=<teacher-jwt>
 }
 ```
 
-### List, update, and deactivate
+The response returns the created question, its order within the DPP, and the
+updated total marks. Invalid question payloads return `400`; a missing or
+non-owned draft DPP returns `404`.
 
-The list route supports `page` (default `1`), `limit` (default `20`, maximum
-`100`), and optional `chapterId`, `subject`, `difficulty`,
-`questionType`, and `active` filters. By default it returns active questions
-only. The response includes a pagination object with page, limit, total, and
-pages.
+### Upload a question image
 
-Updates accept only question fields supported by the model; owner identity and
-active state cannot be changed through the update body. Updating validates the
-merged question and verifies the target chapter is still owned by the teacher.
-Delete is a soft deactivation (`isActive: false`), not a physical database
-deletion. Reads and mutations are scoped to the authenticated teacher. Invalid
-IDs return `400`; missing or non-owned questions return `404`.
+Send a multipart form request to `POST /teachers/uploads/image` with the file
+field named `file`. Accepted formats are JPEG, PNG, and WebP, up to 10 MB.
+The endpoint checks the file signature and stores the image in the
+`/edupilot/question-images` ImageKit folder. Its response includes `url`,
+`fileId`, and `filePath`; send those values in the question's optional
+`image` object. `altText` is optional and can be used for accessibility.
+
+The image upload is separate from saving the question so teachers can decide
+whether to upload an image at all. If they skip image upload, they can submit
+the question text and answer fields directly.
