@@ -298,7 +298,7 @@ const getDPPById = async (req, res) => {
             .populate("chapterId", "title subjectId")
             .populate({
                 path: "questions.questionId",
-                select: "questionText questionType options difficulty subject topicTags marking explanation",
+                select: "questionText questionType options difficulty subject topicTags marking explanation image",
             })
             .lean();
 
