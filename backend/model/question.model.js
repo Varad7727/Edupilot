@@ -33,6 +33,30 @@ const partialMarkingRuleSchema = new mongoose.Schema({
 }, { _id: false })
 
 //markingscheme
+const questionImageSchema = new mongoose.Schema({
+    url: {
+        type: String,
+        required: true,
+        trim: true,
+    },
+    fileId: {
+        type: String,
+        trim: true,
+        default: "",
+    },
+    filePath: {
+        type: String,
+        trim: true,
+        default: "",
+    },
+    altText: {
+        type: String,
+        trim: true,
+        maxlength: 250,
+        default: "",
+    },
+}, { _id: false });
+
 const markingSchema = new mongoose.Schema({
     correctMarks: {
         type: Number,
@@ -92,6 +116,12 @@ const questionSchema = new mongoose.Schema({
         type: String,
         trim: true,
         default: "",
+    },
+
+    // Optional diagram/image attached to the question.
+    image: {
+        type: questionImageSchema,
+        default: undefined,
     },
 
     difficulty: {
