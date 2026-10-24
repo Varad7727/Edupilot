@@ -470,3 +470,83 @@ that are important to document when integrating with the API:
   its response. Do not treat the response as safe to expose.
 - Chapter PATCH has the validation defects described above. These are
   documented, not corrected by this documentation-only change.
+
+## Teacher question bank
+
+Question-bank routes are registered in `backend/routes/question.routes.js`, mounted at
+`/teachers/questions`, and require a teacher session cookie. Questions are
+owned by the authenticated teacher and linked to an existing, non-archived
+chapter owned by that teacher. The request cannot set `createdBy`.
+
+| Method | Exact route | Purpose |
+|---|---|---|
+| POST | `/teachers/questions` | Create a question |
+| GET | `/teachers/questions` | List the teacher's questions |
+| GET | `/teachers/questions/:questionId` | Retrieve one owned question |
+| PATCH | `/teachers/questions/:questionId` | Update an active owned question |
+| DELETE | `/teachers/questions/:questionId` | Deactivate an active owned question |
+
+### Create question
+
+Required JSON fields: `questionText`, `questionType`, `difficulty`,
+`subject`, and `chapterId`. The `questionType` is one of
+`SINGLE_CORRECT`, `MULTIPLE_CORRECT`, or `NUMERICAL`; difficulty is
+`EASY`, `MEDIUM`, or `HARD`; subject is `PHYSICS`, `CHEMISTRY`, or
+`MATHEMATICS`.
+
+MCQs use `options: [{ "key": "A", "text": "..." }]` and `correctOptions`
+containing the corresponding keys. Single-correct questions require exactly
+one correct key; multiple-correct questions require at least one. Numerical
+questions use `numericalAnswer` and may specify a non-negative
+`numericalTolerance`. Optional `marking` supports correct, incorrect,
+unattempted, and multiple-correct partial-marking values.
+
+The server validates question structure and confirms that the chapter belongs
+to the logged-in teacher. The question subject must match the chapter's
+subject name when that name maps to a supported subject value. Success returns
+`201`; invalid question data returns `400`; missing or non-owned chapters
+return `404`.
+
+Example MCQ request:
+
+```http
+POST /teachers/questions
+Content-Type: application/json
+Cookie: token=<teacher-jwt>
+
+{
+  "questionText": "What is 2 + 2?",
+  "questionType": "SINGLE_CORRECT",
+  "options": [
+    { "key": "A", "text": "3" },
+    { "key": "B", "text": "4" },
+    { "key": "C", "text": "5" },
+    { "key": "D", "text": "6" }
+  ],
+  "correctOptions": ["B"],
+  "difficulty": "EASY",
+  "subject": "MATHEMATICS",
+  "chapterId": "<owned-chapter-id>",
+  "topicTags": ["arithmetic"],
+  "marking": {
+    "correctMarks": 4,
+    "incorrectMarks": -1,
+    "unattemptedMarks": 0
+  }
+}
+```
+
+### List, update, and deactivate
+
+The list route supports `page` (default `1`), `limit` (default `20`, maximum
+`100`), and optional `chapterId`, `subject`, `difficulty`,
+`questionType`, and `active` filters. By default it returns active questions
+only. The response includes a pagination object with page, limit, total, and
+pages.
+
+Updates accept only question fields supported by the model; owner identity and
+active state cannot be changed through the update body. Updating validates the
+merged question and verifies the target chapter is still owned by the teacher.
+Delete is a soft deactivation (`isActive: false`), not a physical database
+deletion. Reads and mutations are scoped to the authenticated teacher. Invalid
+IDs return `400`; missing or non-owned questions return `404`.
