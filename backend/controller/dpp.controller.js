@@ -1,7 +1,7 @@
 const mongoose = require('mongoose')
 
 const DPP = require("../model/dpp.model")
-const chapter = require("../model/chapter.model")
+const Chapter = require("../model/chapter.model")
 const Question = require("../model/question.model")
 
 // Helper: get the logged-in teacher's ID.
