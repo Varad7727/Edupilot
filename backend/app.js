@@ -8,7 +8,6 @@ const teacherRoutes = require("./routes/teacher.routes");
 const chapterRoutes = require("./routes/chapter.routes");
 const lessonRoutes = require("./routes/lesson.routes");
 const dppRoutes = require("./routes/dpp.routes");
-const questionRoutes = require("./routes/question.routes");
 const uploadRoutes = require("./routes/upload.routes");
 
 const app = express();
@@ -25,7 +24,6 @@ app.use("/subjects", courseRoutes);
 app.use("/teachers", teacherRoutes);
 app.use("/teachers/chapters", chapterRoutes);
 app.use("/teachers/lessons", lessonRoutes);
-app.use("/teachers/questions", questionRoutes);
 app.use("/teachers/dpps", dppRoutes);
 app.use("/teachers/uploads", uploadRoutes);
 
