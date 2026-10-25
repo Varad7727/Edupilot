@@ -149,7 +149,7 @@ const updateChapter = async (req, res) => {
             updates.title = title.trim();
         }
 
-      
+
         // Description validation
         if (description !== undefined) {
             if (
@@ -350,14 +350,64 @@ const getChapterById = async (req, res) => {
     }
 };
 
+//PublishedChaptersBySubject 
+const getPublishedChaptersBySubject = async (req, res) => {
+    try {
+        const { subjectId } = req.params
+        if (!mongoose.isValidObjectId(subjectId)) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Invalid subject ID."
+            });
+        }
+
+        // Only allow browsing subjects that are active.
+        const subject = await subjectModel.findOne({
+            _id: subjectId,
+            isActive: true
+        }).select("_id")
+
+        if (!subject) {
+            return res.status(404).json({
+                status: "failed",
+                message: "Subject not found."
+            });
+        }
+
+        // Students should see published, non-archived chapters only.
+        const chapters = await chapterModel.find({
+    subjectId: subject._id,
+    status: "published",
+    isArchived: false
+})
+    .select("title description subjectId order")
+    .sort({ order: 1 })
+    .lean();
+
+        return res.status(200).json({
+            status: "success",
+            count: chapters.length,
+            data: chapters
+        });
+
+    } catch (error) {
+        console.error("Get published chapters error:", error);
+
+        return res.status(500).json({
+            status: "failed",
+            message: "Unable to retrieve chapters."
+        });
+    }
+}
 
 
 module.exports = {
-createChapter,
-getMyChapters,
-getChapterById,
-updateChapter,
-archiveChapter
+    createChapter,
+    getMyChapters,
+    getChapterById,
+    updateChapter,
+    archiveChapter,
+    getPublishedChaptersBySubject
 };
 
 

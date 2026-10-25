@@ -9,7 +9,11 @@ const chapterRoutes = require("./routes/chapter.routes");
 const lessonRoutes = require("./routes/lesson.routes");
 const dppRoutes = require("./routes/dpp.routes");
 const uploadRoutes = require("./routes/upload.routes");
-
+const studentRoutes = require("./routes/student.routes.js");
+const studentLessonRoutes = require(
+    "./routes/student.lesson.routes.js"
+)
+const studentChapterRoutes = require("./routes/student.chapter.routes.js");
 const app = express();
 
 app.use(cors());
@@ -27,4 +31,8 @@ app.use("/teachers/lessons", lessonRoutes);
 app.use("/teachers/dpps", dppRoutes);
 app.use("/teachers/uploads", uploadRoutes);
 
+//------------student---------
+app.use("/students", studentRoutes);
+app.use("/students/chapters", studentChapterRoutes);
+app.use("/students/lessons", studentLessonRoutes);
 module.exports = app;

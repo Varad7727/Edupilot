@@ -1,0 +1,76 @@
+const studentModel = require("../model/student.model.js");
+const CourseEnrollment = require("../model/enrollment.model.js");
+
+// GET /students/dashboard
+const getStudentDashboard = async (req, res) => {
+    try {
+        // Get the authenticated student's safe profile
+        const student = await studentModel.findById(req.student._id)
+            .select("firstName lastName email createdAt")
+            .lean()
+
+        if (!student) {
+            return res.status(404).json({
+                status: "failed",
+                message: "Student not found."
+            });
+        }
+
+        // Find this student's active course enrollments.
+        const enrollments = await CourseEnrollment.find({
+            student: student._id,
+            status: "active"
+        })
+
+            // The course field contains only a MongoDB reference, not the course's full details.
+            // With.populate(), Mongoose fetches the referenced course and replaces that reference in the returned result with the course //document.
+
+            .populate({
+                path: "course",
+                select: "name code description classLevel isActive"
+            })
+            .sort({ enrolledAt: -1 })
+            .lean()
+
+        // Exclude courses that are no longer active.
+        const enrolledCourses = enrollments
+            .filter(item => item.course && item.course.isActive)
+            .map(item => ({
+                _id: item.course._id,
+                name: item.course.name,
+                code: item.course.code,
+                description: item.course.description,
+                classLevel: item.course.classLevel,
+                enrolledAt: item.enrolledAt
+            }))
+        return res.status(200).json({
+            status: "success",
+            message: "Student dashboard retrieved successfully.",
+            data: {
+                profile: {
+                    id: student._id,
+                    firstName: student.firstName,
+                    lastName: student.lastName,
+                    fullName: `${student.firstName} ${student.lastName}`,
+                    email: student.email,
+                    joinedAt: student.createdAt
+                },
+                summary: {
+                    enrolledCourses: enrolledCourses.length
+                },
+                enrolledCourses
+            }
+        });
+    } catch (error) {
+        console.error("Get student dashboard error:", error);
+
+        return res.status(500).json({
+            status: "failed",
+            message: "Unable to retrieve student dashboard."
+        });
+    }
+}
+
+module.exports={
+    getStudentDashboard
+}

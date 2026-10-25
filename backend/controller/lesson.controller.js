@@ -770,6 +770,64 @@ const getLessonsByChapter = async (req, res) => {
     }
 };
 
+const getPublishedLessonsByChapter = async (req, res) => {
+    try {
+        const { chapterId } = req.params;
+
+        if (!mongoose.isValidObjectId(chapterId)) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Invalid chapter ID."
+            });
+        }
+
+        // Only allow lessons from published,
+        // non-archived chapters.
+        const Chapter = require("../model/chapter.model.js");
+
+        const chapter = await Chapter.findOne({
+            _id: chapterId,
+            status: "published",
+            isArchived: false
+        }).select("_id");
+
+        if (!chapter) {
+            return res.status(404).json({
+                status: "failed",
+                message: "Published chapter not found."
+            });
+        }
+
+        const lessons = await lessonModel.find({
+            chapterId: chapter._id,
+            status: "published",
+            isArchived: false
+        })
+            .select(
+                "title description chapterId order estimatedDuration difficulty learningObjectives topics tags publishedAt"
+            )
+            .sort({ order: 1 })
+            .lean();
+
+        return res.status(200).json({
+            status: "success",
+            count: lessons.length,
+            data: lessons
+        });
+
+    } catch (error) {
+        console.error(
+            "Get published lessons error:",
+            error
+        );
+
+        return res.status(500).json({
+            status: "failed",
+            message: "Unable to retrieve lessons."
+        });
+    }
+};
+
 module.exports = {
     createLesson,
     getMyLessons,
@@ -778,7 +836,8 @@ module.exports = {
     publishLesson,
     unpublishLesson,
     archiveLesson,
-    getLessonsByChapter
+    getLessonsByChapter,
+    getPublishedLessonsByChapter
 };
 
 // Promise.all() allows multiple asynchronous operations to run concurrently, rather than waiting for each one to finish before starting the next.
