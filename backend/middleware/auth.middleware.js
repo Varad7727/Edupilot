@@ -18,7 +18,7 @@ const authStudentMiddleware = async (req, res, next) => {
         //verify token
         //verified students should get access to the route
         const decoded = jwt.verify(token, process.env.JWT_SECRET)
-        if (decoded.role !== "Student") {
+        if (decoded.role !== "student") {
             return res.status(403).json({
                 message: "Student access only.",
                 status: "failed"

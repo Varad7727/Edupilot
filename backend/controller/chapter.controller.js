@@ -149,28 +149,35 @@ const updateChapter = async (req, res) => {
             updates.title = title.trim();
         }
 
-        //description
+      
+        // Description validation
         if (description !== undefined) {
-            if (description.length() > 2000 ||
-                typeof title !== 'string') {
+            if (
+                typeof description !== "string" ||
+                description.length > 2000
+            ) {
                 return res.status(400).json({
                     status: "failed",
-                    message: "Description must be a string of at most 2000 characters."
-                })
+                    message:
+                        "Description must be a string of at most 2000 characters."
+                });
             }
-            updates.description = description.trim()
+
+            updates.description = description.trim();
         }
 
-        //order
-        if (!order !== undefined) {
+        // Order validation
+        if (order !== undefined) {
             if (!Number.isInteger(order) || order < 1) {
                 return res.status(400).json({
                     status: "failed",
                     message: "Order must be a positive integer."
                 });
             }
-            updates.order = order//its not string i.e
+
+            updates.order = order;
         }
+
 
         //status
         if (status !== undefined) {
