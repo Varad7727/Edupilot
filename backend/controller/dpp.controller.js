@@ -2,6 +2,7 @@ const mongoose = require('mongoose')
 
 const DPP = require("../model/dpp.model")
 const Chapter = require("../model/chapter.model")
+const Chapter = require("../model/chapter.model")
 const Question = require("../model/question.model")
 const { validateQuestion } = require("../utils/questionValidation.utils");
 // Helper: get the logged-in teacher's ID.
@@ -60,6 +61,7 @@ const createDPP = async (req, res) => {
         if (!Array.isArray(questionList)) {
             return res.status(400).json({
                 status: "failed",
+                message: "Questions must be an array.",
                 message: "Questions must be an array.",
             });
         }
@@ -124,8 +126,10 @@ console.log("Requested chapterId:", chapterId);
             });
         }
         // 3. Validate question IDs and their order.
+        const questionList = questions ?? [];
         const questionIds = [];
         const orderValues = [];
+        for (const item of questionList) {
         for (const item of questionList) {
             if (
                 !item ||
@@ -188,6 +192,7 @@ console.log("Requested chapterId:", chapterId);
             ])
         );
         // Preserve the teacher's requested question order.
+        const orderedQuestions = questionList.map((item) => ({
         const orderedQuestions = questionList.map((item) => ({
             questionId: item.questionId,
             order: item.order,
@@ -302,7 +307,7 @@ const getDPPById = async (req, res) => {
             .populate("chapterId", "title subjectId")
             .populate({
                 path: "questions.questionId",
-                select: "questionText questionType options difficulty subject topicTags marking explanation",
+                select: "questionText questionType options difficulty subject topicTags marking explanation image",
             })
             .lean();
 

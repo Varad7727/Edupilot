@@ -470,3 +470,80 @@ that are important to document when integrating with the API:
   its response. Do not treat the response as safe to expose.
 - Chapter PATCH has the validation defects described above. These are
   documented, not corrected by this documentation-only change.
+
+
+## DPP question creation and optional images
+
+Questions are authored inside the existing DPP workflow. There is no separate
+question-bank route. Create a draft DPP first; it may start with an empty
+`questions` array. Add each question through the nested route below. Questions
+use the shared `Question` model, and the backend assigns the question's
+chapter from the owning DPP.
+
+| Method | Exact route | Purpose |
+|---|---|---|
+| POST | `/teachers/dpps/:dppId/questions` | Write a question and append it to a draft DPP |
+| POST | `/teachers/uploads/image` | Upload an optional question image to ImageKit |
+
+Both routes require teacher authentication.
+
+### Add a question to a draft DPP
+
+`POST /teachers/dpps/:dppId/questions` accepts JSON fields `questionText`,
+`questionType`, `options`, `correctOptions`, `numericalAnswer`,
+`numericalTolerance`, `explanation`, `difficulty`, `subject`,
+`topicTags`, `marking`, and optional `image`. The server derives
+`chapterId` from the DPP and `createdBy` from the authenticated teacher.
+Questions can be text-only or include an image. Questions can only be added
+while the DPP is a draft.
+
+Example request:
+
+```http
+POST /teachers/dpps/<draft-dpp-id>/questions
+Content-Type: application/json
+Cookie: token=<teacher-jwt>
+
+{
+  "questionText": "For the circuit shown, calculate the current through R.",
+  "questionType": "SINGLE_CORRECT",
+  "options": [
+    { "key": "A", "text": "1 A" },
+    { "key": "B", "text": "2 A" },
+    { "key": "C", "text": "3 A" },
+    { "key": "D", "text": "4 A" }
+  ],
+  "correctOptions": ["B"],
+  "difficulty": "MEDIUM",
+  "subject": "PHYSICS",
+  "topicTags": ["current-electricity"],
+  "image": {
+    "url": "https://<imagekit-host>/<uploaded-image-path>",
+    "fileId": "<imagekit-file-id>",
+    "filePath": "/edupilot/question-images/example.png",
+    "altText": "Circuit diagram"
+  },
+  "marking": {
+    "correctMarks": 4,
+    "incorrectMarks": -1,
+    "unattemptedMarks": 0
+  }
+}
+```
+
+The response returns the created question, its order within the DPP, and the
+updated total marks. Invalid question payloads return `400`; a missing or
+non-owned draft DPP returns `404`.
+
+### Upload a question image
+
+Send a multipart form request to `POST /teachers/uploads/image` with the file
+field named `file`. Accepted formats are JPEG, PNG, and WebP, up to 10 MB.
+The endpoint checks the file signature and stores the image in the
+`/edupilot/question-images` ImageKit folder. Its response includes `url`,
+`fileId`, and `filePath`; send those values in the question's optional
+`image` object. `altText` is optional and can be used for accessibility.
+
+The image upload is separate from saving the question so teachers can decide
+whether to upload an image at all. If they skip image upload, they can submit
+the question text and answer fields directly.
