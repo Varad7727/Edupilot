@@ -103,9 +103,65 @@
 
 ## `npm test` fails
 
-- **Symptom:** `npm test` exits with `Error: no test specified`.
-- **Likely cause:** The package script is intentionally a placeholder; no test
-  framework or application tests are configured.
-- **How to verify:** Inspect the `test` script in `backend/package.json`.
-- **Recommended fix:** This is not a runtime regression. See
-  [Testing](./testing.md) for the current status.
+- **Symptom:** `npm test` fails to start or one or more tests fail.
+- **Likely cause:** A Node.js runtime/dependency issue or a failing test
+  assertion.
+- **How to verify:** Run `npm test` from `backend/` and inspect the first
+  failing test and stack trace.
+- **Recommended fix:** Confirm dependencies are installed and run the focused
+  test file with `node --test test/<file>.test.js`; see [Testing](./testing.md).
+
+## DPP question and upload troubleshooting
+
+See the focused [DPP authoring troubleshooting table](./dpp-authoring.md#troubleshooting)
+for API-specific symptoms and checks.
+
+### DPP creation rejects supplied questions
+
+- **Symptom:** `POST /teachers/dpps` returns `400` when `questions` is sent.
+- **Likely cause:** IDs are duplicated, orders are duplicated or not
+  continuous from 1, or a referenced question is inactive or belongs to a
+  different chapter.
+- **How to verify:** Confirm every `questionId` exists and is active in the
+  selected chapter; number positions consecutively as `1, 2, 3, ...`.
+- **Recommended fix:** Correct the references/order or create an empty draft
+  and add questions through its nested question endpoint.
+
+### Question payload validation fails
+
+- **Symptom:** `POST /teachers/dpps/:dppId/questions` returns `400` and an
+  `errors` array.
+- **Likely cause:** Question type and answers do not match, option keys are
+  duplicated or missing, subject does not match the chapter, or an image URL
+  is not HTTPS.
+- **How to verify:** Read every returned error; compare values with
+  [Question types and payloads](./dpp-authoring.md#question-types-and-payloads).
+- **Recommended fix:** Correct the supplied fields. The endpoint assigns the
+  chapter and teacher itself; do not rely on client-provided values for them.
+
+### PDF/image upload fails
+
+- **Symptom:** Upload returns `400`, `413`, or `502`.
+- **Likely cause:** Wrong multipart field/MIME type, file signature mismatch,
+  file too large, or ImageKit configuration/connectivity failure.
+- **How to verify:** Send exactly one file in the `file` field, keep PDFs
+  within 20 MB and images within 10 MB, and confirm the bytes match the
+  declared format. For `502`, verify the three ImageKit variables without
+  exposing secrets in logs.
+- **Recommended fix:** Retry with a valid supported file and correct
+  ImageKit configuration. An uploaded image must separately be attached to
+  the question payload using its HTTPS URL and returned metadata. See
+  [DPP authoring](./dpp-authoring.md#file-uploads).
+
+### Course seed reports connection errors
+
+- **Symptom:** `node seed/seedCourses.js` reports query buffering or database
+  connection failures.
+- **Likely cause:** `MONGODB_URI` is invalid/unreachable or the shared
+  connection helper has not completed connection establishment before the
+  seed queries execute.
+- **How to verify:** Check the URI configuration privately and verify
+  MongoDB availability; do not print credentials into shared logs.
+- **Recommended fix:** Restore database connectivity and rerun the seed.
+  The script upserts seed records and can be safely rerun; see
+  [Course and subject seed data](./dpp-authoring.md#course-and-subject-seed-data).

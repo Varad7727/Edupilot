@@ -76,10 +76,11 @@ queries is therefore not guaranteed by the current implementation.
 | Command | Current behavior |
 |---|---|
 | `npm start` | Runs `nodemon server.js` |
-| `npm test` | Placeholder that prints `Error: no test specified` and exits unsuccessfully |
+| `npm test` | Runs Node's built-in test runner with `node --test` |
 
-There is no declared lint, build, migration, or test-runner script. See
-[Testing](./testing.md) for the verified test status.
+There is no declared lint, build, or migration script. See
+[Testing](./testing.md) for the test files and current coverage. For DPP and
+upload authoring, see [DPP authoring](./dpp-authoring.md).
 
 ## Common setup problems
 

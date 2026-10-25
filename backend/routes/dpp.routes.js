@@ -5,7 +5,12 @@ const {
     createDPP,
     getTeacherDPPs,
     getDPPById,
-    addQuestionToDPP
+    addQuestionToDPP,
+    updateDPP,
+    updateQuestionInDPP,
+    removeQuestionFromDPP,
+    reorderDPPQuestions,
+    publishDPP
 } = require("../controller/dpp.controller");
 
 const { authTeacherMiddleware } = require("../middleware/auth.middleware");
@@ -14,10 +19,32 @@ const { authTeacherMiddleware } = require("../middleware/auth.middleware");
 router.post("/", authTeacherMiddleware, createDPP);
 router.get("/", authTeacherMiddleware, getTeacherDPPs);
 router.get("/:dppId", authTeacherMiddleware, getDPPById);
+router.patch("/:dppId", authTeacherMiddleware, updateDPP);
 router.post(
     "/:dppId/questions",
     authTeacherMiddleware,
     addQuestionToDPP
+);
+
+router.patch(
+    "/:dppId/questions/reorder",
+    authTeacherMiddleware,
+    reorderDPPQuestions
+);
+router.patch(
+    "/:dppId/questions/:questionId",
+    authTeacherMiddleware,
+    updateQuestionInDPP
+);
+router.delete(
+    "/:dppId/questions/:questionId",
+    authTeacherMiddleware,
+    removeQuestionFromDPP
+);
+router.patch(
+    "/:dppId/publish",
+    authTeacherMiddleware,
+    publishDPP
 );
 
 module.exports = router;

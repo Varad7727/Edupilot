@@ -12,6 +12,7 @@ cookie, not a documented bearer-token header.
 - [Teacher profile](#teacher-profile)
 - [Teacher chapters](#teacher-chapters)
 - [Teacher lessons](#teacher-lessons)
+- [DPP question creation and optional images](#dpp-question-creation-and-optional-images)
 - [Response conventions and caveats](#response-conventions-and-caveats)
 
 ## Authentication
@@ -474,6 +475,9 @@ that are important to document when integrating with the API:
 
 ## DPP question creation and optional images
 
+For detailed field rules, complete examples, upload setup, seed data, and
+troubleshooting, see the [DPP authoring guide](./dpp-authoring.md).
+
 Questions are authored inside the existing DPP workflow. There is no separate
 question-bank route. Create a draft DPP first; it may start with an empty
 `questions` array. Add each question through the nested route below. Questions
@@ -482,10 +486,27 @@ chapter from the owning DPP.
 
 | Method | Exact route | Purpose |
 |---|---|---|
+| POST | `/teachers/dpps` | Create a draft DPP |
+| GET | `/teachers/dpps` | List the authenticated teacher's non-archived DPPs |
+| GET | `/teachers/dpps/:dppId` | Retrieve an owned DPP with populated chapter and questions |
+| PATCH | `/teachers/dpps/:dppId` | Edit details on an owned draft |
 | POST | `/teachers/dpps/:dppId/questions` | Write a question and append it to a draft DPP |
+| PATCH | `/teachers/dpps/:dppId/questions/:questionId` | Edit a question in a draft |
+| DELETE | `/teachers/dpps/:dppId/questions/:questionId` | Remove a question from a draft |
+| PATCH | `/teachers/dpps/:dppId/questions/reorder` | Reorder questions in a draft |
+| PATCH | `/teachers/dpps/:dppId/publish` | Publish a draft DPP |
+| POST | `/teachers/uploads/pdf` | Upload a source PDF to ImageKit |
 | POST | `/teachers/uploads/image` | Upload an optional question image to ImageKit |
 
-Both routes require teacher authentication.
+All routes require teacher authentication.
+
+`POST /teachers/dpps` creates a DPP as a draft. Required fields are `title`
+(2–150 characters), `chapterId`, integer `durationMinutes` (1–600), and a
+future `deadline`. Optional `questions` must reference active questions in
+that chapter, with unique contiguous order values starting at 1.
+`GET /teachers/dpps` lists the current teacher's non-archived DPPs;
+`GET /teachers/dpps/:dppId` returns one owned, non-archived DPP. There is no
+other DPP lifecycle endpoint beyond the publish operation described below.
 
 ### Add a question to a draft DPP
 
@@ -535,6 +556,9 @@ The response returns the created question, its order within the DPP, and the
 updated total marks. Invalid question payloads return `400`; a missing or
 non-owned draft DPP returns `404`.
 
+For DPP details, question edits/removal/reordering, and publish requirements,
+see [DPP authoring](./dpp-authoring.md#dpp-endpoints).
+
 ### Upload a question image
 
 Send a multipart form request to `POST /teachers/uploads/image` with the file
@@ -547,3 +571,17 @@ The endpoint checks the file signature and stores the image in the
 The image upload is separate from saving the question so teachers can decide
 whether to upload an image at all. If they skip image upload, they can submit
 the question text and answer fields directly.
+
+### Upload a source PDF
+
+Send one multipart file in the `file` field to
+`POST /teachers/uploads/pdf`. Only PDF MIME types are accepted; the maximum
+size is 20 MB and the file signature must begin with `%PDF-`. The file is
+stored in ImageKit's `/edupilot/question-pdfs` folder. This endpoint stores
+the PDF only; it does not extract questions. See the
+[DPP authoring guide](./dpp-authoring.md#file-uploads) for a curl example and
+ImageKit configuration.
+
+Uploads accept one file per request. Oversized requests return `413`;
+unsupported or invalid file data returns `400`; ImageKit failures return
+`502`.

@@ -12,6 +12,8 @@ erDiagram
     COURSE ||--o{ SUBJECT : contains
     SUBJECT ||--o{ CHAPTER : contains
     CHAPTER ||--o{ LESSON : contains
+    CHAPTER ||--o{ DPP : contains
+    DPP }o--o{ QUESTION : references
     TEACHER ||--o{ CHAPTER : creates
     TEACHER ||--o{ LESSON : creates
     LESSON }o--o{ LESSON : prerequisites
@@ -33,6 +35,8 @@ courses. The `Class.subject` field is plain text, not a Mongoose reference.
 | Subject | `subjects` | `backend/model/subject.model.js` | Subject belonging to a course |
 | Chapter | `chapters` | `backend/model/chapter.model.js` | Teacher-authored chapter belonging to a subject |
 | Lesson | `lessons` | `backend/model/lesson.model.js` | Ordered teaching unit inside a chapter, with AI and publication metadata |
+| DPP | `dpps` | `backend/model/dpp.model.js` | Teacher-owned practice set for a chapter, with ordered Question references |
+| Question | `questions` | `backend/model/question.model.js` | Shared teacher-authored question and marking data |
 | Class | `classes` | `backend/model/class.model.js` | Class record associated with a teacher |
 | CourseEnrollment | `courseenrollments` | `backend/model/enrollment.model.js` | Student-course enrollment relation |
 
@@ -157,6 +161,65 @@ Index highlights:
 - `{ topics: 1, status: 1 }` supports topic-based discovery.
 
 The schema intentionally separates content metadata from AI processing state, which lets the app mark lessons stale when AI-relevant fields are changed before reprocessing.
+
+## DPP
+
+Source: `backend/model/dpp.model.js`. DPP endpoints are mounted at
+`/teachers/dpps` and are protected by teacher authentication.
+
+| Field | Type | Required/default | Validation and behavior |
+|---|---|---|---|
+| `title` | String | Required | Trimmed; 2–150 characters |
+| `description` | String | Defaults to `""` | Trimmed; maximum 2,000 characters |
+| `instructions` | String | Defaults to `""` | Trimmed; maximum 5,000 characters |
+| `chapterId` | ObjectId → Chapter | Required | Indexed; create controller checks teacher ownership and archive state |
+| `questions` | Embedded array | Defaults to `[]` | Each item has required `questionId` and `order`; no embedded `_id` |
+| `questions[].questionId` | ObjectId → Question | Required | A question reference; DPP model prevents duplicate IDs |
+| `questions[].order` | Number | Required | Minimum 1; DPP model prevents duplicate positions |
+| `durationMinutes` | Number | Required | 1–600; create endpoint requires an integer |
+| `deadline` | Date | Required | Create endpoint requires a valid future date; determines on-time eligibility, not accessibility |
+| `totalMarks` | Number | Defaults to `0` | Non-negative; calculated by the DPP controller from question correct marks |
+| `creationMethod` | String | Defaults to `"MANUAL"` | `MANUAL`, `PDF`, `IMAGE`, or `MIXED` |
+| `status` | String | Defaults to `"draft"` | `draft` or `published`; current create route always creates drafts |
+| `createdBy` | ObjectId → Teacher | Required | Indexed; assigned from authenticated teacher |
+| `isArchived` | Boolean | Defaults to `false` | Teacher listing and detail routes exclude archived DPPs |
+| timestamps | Dates | Automatic | `createdAt`, `updatedAt` |
+
+Indexes: `{ chapterId: 1, status: 1, deadline: 1 }` and
+`{ createdBy: 1, createdAt: -1 }`. The schema validates uniqueness of
+question IDs and order values. The create controller further requires
+question orders to be continuous starting at 1 and validates referenced
+questions' chapter and active state.
+
+## Question
+
+Source: `backend/model/question.model.js`. Questions are created by the
+nested draft-DPP route; there is no separate question-bank route.
+
+| Field | Type | Required/default | Validation and behavior |
+|---|---|---|---|
+| `questionText` | String | Required | Trimmed |
+| `questionType` | String | Required | `SINGLE_CORRECT`, `MULTIPLE_CORRECT`, or `NUMERICAL` |
+| `options` | Embedded array | Defaults to `[]` | Each option has required trimmed `key` and `text`; embedded `_id` disabled |
+| `correctOptions` | String[] | Defaults to `[]` | Answer keys for MCQs |
+| `numericalAnswer` | Number | Conditional | Used for numerical questions |
+| `numericalTolerance` | Number | Defaults to `0` | Minimum 0 |
+| `explanation` | String | Defaults to `""` | Trimmed |
+| `image` | Embedded object | Optional | HTTPS URL required by question utility; optional file ID/path and alt text (maximum 250 characters) |
+| `difficulty` | String | Required | `EASY`, `MEDIUM`, or `HARD` |
+| `subject` | String | Required | `PHYSICS`, `CHEMISTRY`, or `MATHEMATICS` |
+| `chapterId` | ObjectId → Chapter | Required | Indexed; controller derives this from the owning DPP |
+| `topicTags` | String[] | Defaults to `[]` | Topic labels |
+| `marking` | Embedded object | Defaults to `{}` | Correct marks default to 4, incorrect to -1, unattempted to 0; may include partial rules |
+| `createdBy` | ObjectId → Teacher | Required | Controller derives this from authentication |
+| `isActive` | Boolean | Defaults to `true` | Used when validating DPP question references |
+| timestamps | Dates | Automatic | `createdAt`, `updatedAt` |
+
+The question validation utility enforces type-specific answer rules, unique
+option keys, and valid answer references. It also permits partial-marking
+rules only for `MULTIPLE_CORRECT`. The schema index
+`{ chapterId: 1, questionType: 1, difficulty: 1 }` supports chapter-scoped
+question queries.
 
 ## Class
 

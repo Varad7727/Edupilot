@@ -20,7 +20,7 @@ can locate behavior quickly.
 | Class schema | `backend/model/class.model.js` | Teacher reference; no mounted class route/controller |
 | Enrollment schema | `backend/model/enrollment.model.js` | Student and Course references; no mounted enrollment route/controller |
 | Lesson API and schema | `backend/model/lesson.model.js`, `backend/routes/lesson.routes.js`, `backend/controller/lesson.controller.js` | Teacher-owned lesson CRUD, chapter-scoped listing, publishing lifecycle, and AI metadata tracking |
-| DPP question authoring | `backend/model/question.model.js`, `backend/controller/dpp.controller.js`, `backend/utils/questionValidation.utils.js` | Questions are created inside a draft DPP; optional image metadata is stored on the shared Question model |
+| DPP question authoring and uploads | `backend/model/dpp.model.js`, `backend/model/question.model.js`, `backend/routes/dpp.routes.js`, `backend/controller/dpp.controller.js`, `backend/utils/questionValidation.utils.js`, `backend/routes/upload.routes.js`, `backend/controller/upload.controller.js`, `backend/middleware/upload.middleware.js` | Teacher-owned draft DPP creation/retrieval, nested question authoring, PDF/image uploads to ImageKit |
 | Seed data | `backend/seed/seedCourses.js` | Upserts course and subject catalog records |
 
 ## Key exported operations
@@ -50,11 +50,21 @@ Chapter operations use the authenticated teacher as the ownership scope. See
 
 ### DPP question authoring
 
+- `dpp.model.js`: DPP schema with ordered question references, time limit,
+  deadline, creation method, draft/published status, owner, and archive flag.
 - `question.model.js`: shared schema for text questions, answer options, marking, and optional image metadata.
-- `dpp.controller.js`: creates questions through `POST /teachers/dpps/:dppId/questions` and attaches them to a draft DPP.
-- `upload.controller.js`: uploads optional question images through `POST /teachers/uploads/image`.
+- `dpp.controller.js`: creates, retrieves, and updates teacher-owned DPPs;
+  creates, edits, removes, and reorders draft questions; publishes valid
+  drafts.
+- `dpp.routes.js`: mounts authenticated endpoints under `/teachers/dpps`,
+  including `/publish`.
+- `questionValidation.utils.js`: validates question type, options, answers,
+  marking, and optional image metadata before persistence.
+- `upload.controller.js` and `upload.middleware.js`: validate and upload PDFs
+  and question images; only PDF and image routes are mounted.
 
-See [API reference](./api-reference.md#dpp-question-creation-and-optional-images).
+See [DPP authoring](./dpp-authoring.md) and the
+[API reference](./api-reference.md#dpp-question-creation-and-optional-images).
 
 ### Teacher lessons
 
