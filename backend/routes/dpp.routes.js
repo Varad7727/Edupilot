@@ -5,6 +5,7 @@ const {
     createDPP,
     getTeacherDPPs,
     getDPPById,
+    addQuestionToDPP
 } = require("../controller/dpp.controller");
 
 const { authTeacherMiddleware } = require("../middleware/auth.middleware");
@@ -13,5 +14,10 @@ const { authTeacherMiddleware } = require("../middleware/auth.middleware");
 router.post("/", authTeacherMiddleware, createDPP);
 router.get("/", authTeacherMiddleware, getTeacherDPPs);
 router.get("/:dppId", authTeacherMiddleware, getDPPById);
+router.post(
+    "/:dppId/questions",
+    authTeacherMiddleware,
+    addQuestionToDPP
+);
 
 module.exports = router;

@@ -57,7 +57,93 @@ const uploadPDF = async (req, res) => {
     }
 
 }
+// POST /teachers/uploads/image
+const uploadQuestionImage = async (req, res) => {
+    try {
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Please select an image to upload.",
+            });
+        }
+
+        // Validate the file signature as well as its MIME type.
+        const bytes = file.buffer;
+
+        const isJpeg =
+            bytes.length >= 3 &&
+            bytes[0] === 0xff &&
+            bytes[1] === 0xd8 &&
+            bytes[2] === 0xff;
+
+        const isPng =
+            bytes.length >= 8 &&
+            bytes
+                .subarray(0, 8)
+                .equals(
+                    Buffer.from([
+                        0x89, 0x50, 0x4e, 0x47,
+                        0x0d, 0x0a, 0x1a, 0x0a,
+                    ])
+                );
+
+        const isWebp =
+            bytes.length >= 12 &&
+            bytes.subarray(0, 4).toString() === "RIFF" &&
+            bytes.subarray(8, 12).toString() === "WEBP";
+
+        const signatureMatchesMime =
+            (file.mimetype === "image/jpeg" && isJpeg) ||
+            (file.mimetype === "image/png" && isPng) ||
+            (file.mimetype === "image/webp" && isWebp);
+
+        if (!signatureMatchesMime) {
+            return res.status(400).json({
+                status: "failed",
+                message:
+                    "The uploaded file is not a valid JPEG, PNG, or WebP image.",
+            });
+        }
+
+        const extensionByType = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+        };
+
+        const extension = extensionByType[file.mimetype];
+
+        if (!extension) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Unsupported image format.",
+            });
+        }
+
+        const uploadFile = await uploadToImageKit({
+            file,
+            folder: "/edupilot/question-images",
+            fileName: `question-image${extension}`,
+        });
+
+        return res.status(201).json({
+            status: "success",
+            message: "Question image uploaded successfully.",
+            data: { file: uploadFile },
+        });
+    } catch (error) {
+        console.error("Question image upload error:", error);
+
+        return res.status(502).json({
+            status: "failed",
+            message: "Image upload failed. Please try again.",
+        });
+    }
+};
 
 module.exports = {
     uploadPDF,
+    uploadQuestionImage
 };

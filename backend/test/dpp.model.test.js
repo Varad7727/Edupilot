@@ -118,3 +118,11 @@ test("new DPP should default to draft status", () => {
     assert.equal(dpp.isArchived, false);
     assert.equal(dpp.creationMethod, "MANUAL");
 });
+
+test("draft DPP can be created before its questions are added", async () => {
+    const dpp = new DPP(
+        makeValidDPP({ questions: [] })
+    );
+
+    await assert.doesNotReject(() => dpp.validate());
+});

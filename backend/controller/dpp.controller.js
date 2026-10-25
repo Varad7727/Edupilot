@@ -1,9 +1,9 @@
 const mongoose = require('mongoose')
 
 const DPP = require("../model/dpp.model")
-const chapter = require("../model/chapter.model")
+const Chapter = require("../model/chapter.model")
 const Question = require("../model/question.model")
-
+const { validateQuestion } = require("../utils/questionValidation.utils");
 // Helper: get the logged-in teacher's ID.
 const getTeacherId = (req) => req.teacher?._id;
 
@@ -55,10 +55,12 @@ const createDPP = async (req, res) => {
                 message: "A valid chapter ID is required.",
             });
         }
-        if (!Array.isArray(questions) || questions.length === 0) {
+        const questionList = questions ?? [];
+
+        if (!Array.isArray(questionList)) {
             return res.status(400).json({
                 status: "failed",
-                message: "A DPP must contain at least one question.",
+                message: "Questions must be an array.",
             });
         }
         if (
@@ -108,6 +110,8 @@ const createDPP = async (req, res) => {
             });
         }
         // 2. Verify chapter ownership.
+        console.log("Authenticated teacherId:", teacherId);
+console.log("Requested chapterId:", chapterId);
         const chapter = await Chapter.findOne({
             _id: chapterId,
             createdBy: teacherId,
@@ -122,7 +126,7 @@ const createDPP = async (req, res) => {
         // 3. Validate question IDs and their order.
         const questionIds = [];
         const orderValues = [];
-        for (const item of questions) {
+        for (const item of questionList) {
             if (
                 !item ||
                 !mongoose.isValidObjectId(item.questionId) ||
@@ -184,7 +188,7 @@ const createDPP = async (req, res) => {
             ])
         );
         // Preserve the teacher's requested question order.
-        const orderedQuestions = questions.map((item) => ({
+        const orderedQuestions = questionList.map((item) => ({
             questionId: item.questionId,
             order: item.order,
         }));
@@ -194,7 +198,9 @@ const createDPP = async (req, res) => {
             questionMap.get(item.questionId.toString())
         );
 
-        const totalMarks = calculateTotalMarks(orderedQuestionDocs);
+        const totalMarks = orderedQuestionDocs.length > 0
+            ? calculateTotalMarks(orderedQuestionDocs)
+            : 0;
 
         // 6. Save the DPP as a draft.
         const dpp = await DPP.create({
@@ -321,10 +327,196 @@ const getDPPById = async (req, res) => {
     }
 };
 
+//write questions
+
+const addQuestionToDPP = async (req, res) => {
+    let createdQuestionId;
+
+    try {
+        const teacherId = req.teacher?._id;
+        const { dppId } = req.params;
+
+        if (!teacherId) {
+            return res.status(401).json({
+                status: "failed",
+                message: "Teacher authentication is required.",
+            });
+        }
+
+        if (!mongoose.isValidObjectId(dppId)) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Invalid DPP ID.",
+            });
+        }
+
+        const dpp = await DPP.findOne({
+            _id: dppId,
+            createdBy: teacherId,
+            isArchived: false,
+            status: "draft",
+        });
+
+        if (!dpp) {
+            return res.status(404).json({
+                status: "failed",
+                message: "Draft DPP not found or not owned by this teacher.",
+            });
+        }
+
+        // Only accept fields the teacher is allowed to provide.
+        const allowedFields = [
+            "questionText",
+            "questionType",
+            "options",
+            "correctOptions",
+            "numericalAnswer",
+            "numericalTolerance",
+            "explanation",
+            "image",
+            "difficulty",
+            "subject",
+            "topicTags",
+            "marking",
+        ];
+
+        const data = Object.fromEntries(
+            allowedFields
+                .filter((field) =>
+                    Object.prototype.hasOwnProperty.call(
+                        req.body || {},
+                        field
+                    )
+                )
+                .map((field) => [field, req.body[field]])
+        );
+
+        // Never trust the client to choose the chapter or question owner.
+        data.chapterId = String(dpp.chapterId);
+
+        const validation = validateQuestion(data);
+
+        if (!validation.isValid) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Question validation failed.",
+                errors: validation.errors,
+            });
+        }
+
+        const chapter = await Chapter.findOne({
+            _id: dpp.chapterId,
+            createdBy: teacherId,
+            isArchived: false,
+        }).populate("subjectId", "name code");
+
+        if (!chapter) {
+            return res.status(404).json({
+                status: "failed",
+                message: "DPP chapter not found or not owned by this teacher.",
+            });
+        }
+
+        // If the chapter subject is recognized, enforce a subject match.
+        const chapterSubjectName = String(
+            chapter.subjectId?.name || chapter.subjectId?.code || ""
+        )
+            .replace(/[^a-z]/gi, "")
+            .toUpperCase();
+
+        const normalizedChapterSubject =
+            chapterSubjectName === "MATH" ||
+                chapterSubjectName === "MATHS"
+                ? "MATHEMATICS"
+                : chapterSubjectName;
+
+        if (
+            ["PHYSICS", "CHEMISTRY", "MATHEMATICS"].includes(
+                normalizedChapterSubject
+            ) &&
+            normalizedChapterSubject !== data.subject
+        ) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Question subject must match the DPP chapter subject.",
+            });
+        }
+
+        const question = await Question.create({
+            ...data,
+            createdBy: teacherId,
+        });
+
+        createdQuestionId = question._id;
+
+        const nextOrder =
+            dpp.questions.reduce(
+                (maxOrder, item) => Math.max(maxOrder, item.order),
+                0
+            ) + 1;
+
+        dpp.questions.push({
+            questionId: question._id,
+            order: nextOrder,
+        });
+
+        const questionDocs = await Question.find({
+            _id: {
+                $in: dpp.questions.map((item) => item.questionId),
+            },
+            isActive: true,
+        }).select("_id marking");
+
+        dpp.totalMarks = questionDocs.reduce(
+            (total, item) =>
+                total + (item.marking?.correctMarks ?? 4),
+            0
+        );
+
+        await dpp.save();
+
+        return res.status(201).json({
+            status: "success",
+            message: "Question added to DPP successfully.",
+            data: {
+                question,
+                order: nextOrder,
+                totalMarks: dpp.totalMarks,
+            },
+        });
+    } catch (error) {
+        // Remove the new question if saving the DPP fails.
+        if (createdQuestionId) {
+            await Question.deleteOne({
+                _id: createdQuestionId,
+            }).catch(() => { });
+        }
+
+        console.error("Add question to DPP error:", error);
+
+        if (error.name === "ValidationError") {
+            return res.status(400).json({
+                status: "failed",
+                message: "Question validation failed.",
+                errors: Object.values(error.errors).map(
+                    (item) => item.message
+                ),
+            });
+        }
+
+        return res.status(500).json({
+            status: "failed",
+            message: "An unexpected error occurred while adding the question.",
+        });
+    }
+};
+
+
 module.exports = {
     createDPP,
     getTeacherDPPs,
     getDPPById,
+    addQuestionToDPP
 };
 
 

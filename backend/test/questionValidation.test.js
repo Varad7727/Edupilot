@@ -63,3 +63,44 @@ test("MCQ with duplicate option keys should fail", () => {
         )
     );
 });
+
+test("question image is optional", () => {
+    const result = validateQuestion(validQuestion);
+
+    assert.equal(result.isValid, true);
+});
+
+test("valid HTTPS question image should pass validation", () => {
+    const question = {
+        ...validQuestion,
+        image: {
+            url: "https://ik.imagekit.io/edupilot/question-images/example.png",
+            fileId: "image-file-id",
+            filePath: "/edupilot/question-images/example.png",
+            altText: "Physics circuit diagram",
+        },
+    };
+
+    const result = validateQuestion(question);
+
+    assert.equal(result.isValid, true);
+});
+
+test("question image must use HTTPS", () => {
+    const question = {
+        ...validQuestion,
+        image: {
+            url: "http://example.com/image.png",
+        },
+    };
+
+    const result = validateQuestion(question);
+
+    assert.equal(result.isValid, false);
+
+    assert.ok(
+        result.errors.some((error) =>
+            error.includes("HTTPS URL")
+        )
+    );
+});

@@ -205,7 +205,8 @@ const validateQuestion = (data) => {
 
     if (!marking || typeof marking !== "object" || Array.isArray(marking)) {
         errors.push("Marking configuration is required.");
-    } else {
+    }
+     else {
         for (const field of [
             "correctMarks",
             "incorrectMarks",
@@ -265,6 +266,37 @@ const validateQuestion = (data) => {
                         "Partial marking rules are only allowed for multiple-correct questions."
                     );
                 }
+            }
+        }
+    }
+
+    //image validation
+   
+    // 12. Optional question image
+    if (data.image !== undefined && data.image !== null) {
+        if (
+            typeof data.image !== "object" ||
+            Array.isArray(data.image)
+        ) {
+            errors.push("Question image must be an object.");
+        } else {
+            if (
+                typeof data.image.url !== "string" ||
+                !/^https:\/\/.+/i.test(data.image.url)
+            ) {
+                errors.push("Question image must have a valid HTTPS URL.");
+            }
+
+            if (
+                data.image.altText !== undefined &&
+                (
+                    typeof data.image.altText !== "string" ||
+                    data.image.altText.length > 250
+                )
+            ) {
+                errors.push(
+                    "Image alt text must be a string of at most 250 characters."
+                );
             }
         }
     }
