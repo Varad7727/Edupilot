@@ -1,6 +1,8 @@
 const studentModel = require("../model/student.model.js");
 const CourseEnrollment = require("../model/enrollment.model.js");
-
+const Subject = require("../model/subject.model.js");
+const Chapter = require("../model/chapter.model.js");
+const Lesson = require("../model/lesson.model.js");
 // GET /students/dashboard
 const getStudentDashboard = async (req, res) => {
     try {
@@ -43,6 +45,73 @@ const getStudentDashboard = async (req, res) => {
                 classLevel: item.course.classLevel,
                 enrolledAt: item.enrolledAt
             }))
+
+        const courseIds = enrolledCourses.map(course => course._id);
+
+        // Get active subjects belonging to enrolled courses.
+        const subjects = await Subject.find({
+            courseId: { $in: courseIds },
+            isActive: true
+        })
+            .select("name code description displayOrder courseId")
+            .sort({ displayOrder: 1 })
+            .lean();
+
+        // Get published, non-archived chapters for those subjects.
+        const subjectIds = subjects.map(subject => subject._id);
+
+        const chapters = await Chapter.find({
+            subjectId: { $in: subjectIds },
+            status: "published",
+            isArchived: false
+        })
+            .select("title description subjectId order")
+            .sort({ order: 1 })
+            .lean();
+
+        // Get published, non-archived lessons for those chapters.
+        const chapterIds = chapters.map(chapter => chapter._id);
+
+        const lessons = await Lesson.find({
+            chapterId: { $in: chapterIds },
+            status: "published",
+            isArchived: false
+        })
+            .select("title chapterId order estimatedDuration difficulty")
+            .sort({ order: 1 })
+            .lean();
+
+        // Assemble the course -> subject -> chapter -> lesson hierarchy.
+        const courseOverview = enrolledCourses.map(course => {
+            const courseSubjects = subjects
+                .filter(subject =>
+                    subject.courseId.toString() === course._id.toString()
+                )
+                .map(subject => {
+                    const subjectChapters = chapters
+                        .filter(chapter =>
+                            chapter.subjectId.toString() === subject._id.toString()
+                        )
+                        .map(chapter => ({
+                            ...chapter,
+                            lessons: lessons.filter(
+                                lesson =>
+                                    lesson.chapterId.toString() ===
+                                    chapter._id.toString()
+                            )
+                        }));
+
+                    return {
+                        ...subject,
+                        chapters: subjectChapters
+                    };
+                });
+
+            return {
+                ...course,
+                subjects: courseSubjects
+            };
+        });
         return res.status(200).json({
             status: "success",
             message: "Student dashboard retrieved successfully.",
@@ -71,6 +140,6 @@ const getStudentDashboard = async (req, res) => {
     }
 }
 
-module.exports={
+module.exports = {
     getStudentDashboard
 }

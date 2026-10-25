@@ -1,6 +1,59 @@
 
 const mongoose = require("mongoose");
 
+const resourceSchema = new mongoose.Schema(
+    {
+        title: {
+            type: String,
+            required: true,
+            trim: true,
+            maxlength: 150,
+        },
+
+        type: {
+            type: String,
+            enum: ["pdf", "video", "image"],
+            required: true,
+        },
+
+        url: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+
+        fileId: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+
+        filePath: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+
+        mimeType: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+
+        size: {
+            type: Number,
+            required: true,
+            min: 1,
+        },
+
+        uploadedAt: {
+            type: Date,
+            default: Date.now,
+        },
+    },
+    { _id: true }
+);
+
 const lessonSchema = new mongoose.Schema(
     {
         // Identity
@@ -173,7 +226,11 @@ const lessonSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
             index: true
-        }
+        },
+        resources: {
+            type: [resourceSchema],
+            default: [],
+        },
     },
     {
         timestamps: true

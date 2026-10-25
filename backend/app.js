@@ -9,6 +9,7 @@ const chapterRoutes = require("./routes/chapter.routes");
 const lessonRoutes = require("./routes/lesson.routes");
 const dppRoutes = require("./routes/dpp.routes");
 const uploadRoutes = require("./routes/upload.routes");
+const studentDPPRoutes = require("./routes/student.dpp.routes.js");
 const studentRoutes = require("./routes/student.routes.js");
 const studentLessonRoutes = require(
     "./routes/student.lesson.routes.js"
@@ -19,7 +20,8 @@ const app = express();
 app.use(cors());
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
-
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use("/auth", authRoutes);
 app.use("/courses", courseRoutes);
 app.use("/subjects", courseRoutes);
@@ -35,4 +37,5 @@ app.use("/teachers/uploads", uploadRoutes);
 app.use("/students", studentRoutes);
 app.use("/students/chapters", studentChapterRoutes);
 app.use("/students/lessons", studentLessonRoutes);
+app.use("/students/dpps", studentDPPRoutes);
 module.exports = app;

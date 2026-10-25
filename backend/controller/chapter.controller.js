@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const chapterModel = require("../model/chapter.model.js");
 const subjectModel = require("../model/subject.model.js");
-
+const { hasActiveCourseEnrollment } = require("../utils/studentAccess.utils.js");
 //create chapter
 
 

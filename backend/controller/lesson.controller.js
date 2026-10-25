@@ -1,7 +1,11 @@
 const mongoose = require("mongoose")
 const lessonModel = require("../model/lesson.model")
 const chapterModel = require("../model/chapter.model")
+const subjectModel = require("../model/subject.model.js");
 
+const {
+    hasActiveCourseEnrollment
+} = require("../utils/studentAccess.utils.js");
 // Fields allowed in a lesson create/update request.
 const editableFields = [
     "title",
@@ -770,6 +774,7 @@ const getLessonsByChapter = async (req, res) => {
     }
 };
 
+
 const getPublishedLessonsByChapter = async (req, res) => {
     try {
         const { chapterId } = req.params;
@@ -781,15 +786,14 @@ const getPublishedLessonsByChapter = async (req, res) => {
             });
         }
 
-        // Only allow lessons from published,
-        // non-archived chapters.
         const Chapter = require("../model/chapter.model.js");
 
+        // Find a published, non-archived chapter.
         const chapter = await Chapter.findOne({
             _id: chapterId,
             status: "published",
             isArchived: false
-        }).select("_id");
+        }).select("_id subjectId").lean();
 
         if (!chapter) {
             return res.status(404).json({
@@ -798,6 +802,33 @@ const getPublishedLessonsByChapter = async (req, res) => {
             });
         }
 
+        // Resolve the parent course through the subject.
+        const subject = await subjectModel.findOne({
+            _id: chapter.subjectId,
+            isActive: true
+        }).select("_id courseId").lean();
+
+        if (!subject) {
+            return res.status(404).json({
+                status: "failed",
+                message: "Subject not found."
+            });
+        }
+
+        // Only enrolled students can access lessons.
+        const hasAccess = await hasActiveCourseEnrollment(
+            req.student?._id,
+            subject.courseId
+        );
+
+        if (!hasAccess) {
+            return res.status(403).json({
+                status: "failed",
+                message: "You are not enrolled in this course."
+            });
+        }
+
+        // Return published, non-archived lessons only.
         const lessons = await lessonModel.find({
             chapterId: chapter._id,
             status: "published",
@@ -816,10 +847,7 @@ const getPublishedLessonsByChapter = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(
-            "Get published lessons error:",
-            error
-        );
+        console.error("Get published lessons error:", error);
 
         return res.status(500).json({
             status: "failed",
@@ -827,6 +855,7 @@ const getPublishedLessonsByChapter = async (req, res) => {
         });
     }
 };
+
 
 module.exports = {
     createLesson,
