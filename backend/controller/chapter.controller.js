@@ -353,7 +353,16 @@ const getChapterById = async (req, res) => {
 //PublishedChaptersBySubject 
 const getPublishedChaptersBySubject = async (req, res) => {
     try {
-        const { subjectId } = req.params
+        const { subjectId } = req.params;
+        const studentId = req.student?._id;
+
+        if (!studentId) {
+            return res.status(401).json({
+                status: "failed",
+                message: "Student authentication is required."
+            });
+        }
+
         if (!mongoose.isValidObjectId(subjectId)) {
             return res.status(400).json({
                 status: "failed",
@@ -361,11 +370,10 @@ const getPublishedChaptersBySubject = async (req, res) => {
             });
         }
 
-        // Only allow browsing subjects that are active.
         const subject = await subjectModel.findOne({
             _id: subjectId,
             isActive: true
-        }).select("_id")
+        }).select("_id courseId").lean();
 
         if (!subject) {
             return res.status(404).json({
@@ -374,15 +382,26 @@ const getPublishedChaptersBySubject = async (req, res) => {
             });
         }
 
-        // Students should see published, non-archived chapters only.
+        const hasAccess = await hasActiveCourseEnrollment(
+            studentId,
+            subject.courseId
+        );
+
+        if (!hasAccess) {
+            return res.status(403).json({
+                status: "failed",
+                message: "You are not enrolled in this course."
+            });
+        }
+
         const chapters = await chapterModel.find({
-    subjectId: subject._id,
-    status: "published",
-    isArchived: false
-})
-    .select("title description subjectId order")
-    .sort({ order: 1 })
-    .lean();
+            subjectId: subject._id,
+            status: "published",
+            isArchived: false
+        })
+            .select("title description subjectId order")
+            .sort({ order: 1 })
+            .lean();
 
         return res.status(200).json({
             status: "success",
@@ -398,7 +417,7 @@ const getPublishedChaptersBySubject = async (req, res) => {
             message: "Unable to retrieve chapters."
         });
     }
-}
+};
 
 
 module.exports = {

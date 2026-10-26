@@ -5,6 +5,9 @@ const chapterController = require("../controller/chapter.controller.js");
 const {
     authTeacherMiddleware
 } = require("../middleware/auth.middleware.js");
+const {
+    authStudentMiddleware
+} = require("../middleware/auth.middleware.js");
 
 router.post(
     "/",
@@ -34,6 +37,12 @@ router.delete(
     "/:chapterId",
     authTeacherMiddleware,
     chapterController.archiveChapter
+);
+
+router.get(
+"/subjects/",
+authStudentMiddleware,
+chapterController.getPublishedChaptersBySubject
 );
 
 module.exports = router;

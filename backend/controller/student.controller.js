@@ -112,24 +112,28 @@ const getStudentDashboard = async (req, res) => {
                 subjects: courseSubjects
             };
         });
-        return res.status(200).json({
-            status: "success",
-            message: "Student dashboard retrieved successfully.",
-            data: {
-                profile: {
-                    id: student._id,
-                    firstName: student.firstName,
-                    lastName: student.lastName,
-                    fullName: `${student.firstName} ${student.lastName}`,
-                    email: student.email,
-                    joinedAt: student.createdAt
-                },
-                summary: {
-                    enrolledCourses: enrolledCourses.length
-                },
-                enrolledCourses
-            }
-        });
+       return res.status(200).json({
+    status: "success",
+    message: "Student dashboard retrieved successfully.",
+    data: {
+        profile: {
+            id: student._id,
+            firstName: student.firstName,
+            lastName: student.lastName,
+            fullName: `${student.firstName} ${student.lastName}`,
+            email: student.email,
+            joinedAt: student.createdAt
+        },
+        summary: {
+            enrolledCourses: enrolledCourses.length,
+            subjects: subjects.length,
+            chapters: chapters.length,
+            lessons: lessons.length
+        },
+        enrolledCourses,
+        courseOverview
+    }
+});
     } catch (error) {
         console.error("Get student dashboard error:", error);
 
