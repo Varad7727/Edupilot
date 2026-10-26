@@ -3,6 +3,7 @@ const mongoose = require('mongoose')
 const DPP = require("../model/dpp.model")
 const Chapter = require("../model/chapter.model")
 const Question = require("../model/question.model")
+const StudentDppAttempt = require("../model/studentDppAttempt.model")
 const { validateQuestion } = require("../utils/questionValidation.utils");
 // Helper: get the logged-in teacher's ID.
 const getTeacherId = (req) => req.teacher?._id;
@@ -1248,18 +1249,84 @@ const publishDPP = async (req, res) => {
     }
 }
 
+const getTeacherStudentAttempts = async (req, res) => {
+    try {
+        const teacherId = getTeacherId(req);
+        if (!teacherId) {
+            return res.status(401).json({
+                status: "failed",
+                message: "Teacher authentication is required."
+            });
+        }
 
-    module.exports = {
-        createDPP,
-        getTeacherDPPs,
-        getDPPById,
-        addQuestionToDPP,
-        updateDPP,
-        updateQuestionInDPP,
-        removeQuestionFromDPP,
-        reorderDPPQuestions,
-        publishDPP
-    };
+        // Find all DPPs created by this teacher
+        const teacherDPPs = await DPP.find({ createdBy: teacherId }).select('_id title totalMarks durationMinutes chapterId');
+        const dppIds = teacherDPPs.map(d => d._id);
+
+        if (dppIds.length === 0) {
+            return res.status(200).json({
+                status: "success",
+                count: 0,
+                analytics: {
+                    totalAttempts: 0,
+                    avgScore: 0,
+                    avgAccuracy: 0,
+                    uniqueStudents: 0
+                },
+                data: []
+            });
+        }
+
+        const attempts = await StudentDppAttempt.find({
+            dpp: { $in: dppIds },
+            status: { $in: ["SUBMITTED", "AUTO_SUBMITTED"] }
+        })
+            .populate("student", "firstName lastName email")
+            .populate("dpp", "title totalMarks durationMinutes")
+            .sort({ submittedAt: -1 })
+            .limit(100)
+            .lean();
+
+        const totalAttempts = attempts.length;
+        const totalScore = attempts.reduce((sum, a) => sum + (a.score || 0), 0);
+        const totalAccuracy = attempts.reduce((sum, a) => sum + (a.accuracy || 0), 0);
+        const uniqueStudentIds = new Set(attempts.map(a => a.student?._id?.toString()).filter(Boolean));
+
+        const avgScore = totalAttempts > 0 ? Math.round((totalScore / totalAttempts) * 10) / 10 : 0;
+        const avgAccuracy = totalAttempts > 0 ? Math.round((totalAccuracy / totalAttempts) * 10) / 10 : 0;
+
+        return res.status(200).json({
+            status: "success",
+            count: attempts.length,
+            analytics: {
+                totalAttempts,
+                avgScore,
+                avgAccuracy,
+                uniqueStudents: uniqueStudentIds.size
+            },
+            data: attempts
+        });
+    } catch (error) {
+        console.error("Get teacher student attempts error:", error);
+        return res.status(500).json({
+            status: "failed",
+            message: "Unable to retrieve student attempt analytics."
+        });
+    }
+};
+
+module.exports = {
+    createDPP,
+    getTeacherDPPs,
+    getDPPById,
+    addQuestionToDPP,
+    updateDPP,
+    updateQuestionInDPP,
+    removeQuestionFromDPP,
+    reorderDPPQuestions,
+    publishDPP,
+    getTeacherStudentAttempts
+};
 
 
 // What is new Set()?

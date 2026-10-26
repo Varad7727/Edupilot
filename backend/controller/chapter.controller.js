@@ -79,7 +79,8 @@ const createChapter = async (req, res) => {
             description: description?.trim() || "",
             subjectId: subject._id,
             createdBy: req.teacher._id,
-            order
+            order,
+            resources: Array.isArray(req.body.resources) ? req.body.resources : []
         });
 
         // Send success response
@@ -104,7 +105,7 @@ const createChapter = async (req, res) => {
 const updateChapter = async (req, res) => {
     try {
         const { chapterId } = req.params
-        const { title, description, order, status } = req.body
+        const { title, description, order, status, resources } = req.body
         if (!mongoose.isValidObjectId(chapterId)) {
             return res.status(400).json({
                 status: "failed",
@@ -113,7 +114,7 @@ const updateChapter = async (req, res) => {
         }
 
         // Reject fields that this endpoint does not allow
-        const allowedFields = ["title", "description", "order", "status"]
+        const allowedFields = ["title", "description", "order", "status", "resources"]
         const recievedFields = Object.keys(req.body)
 
         // req.body → gives you the actual data.
@@ -125,7 +126,7 @@ const updateChapter = async (req, res) => {
 
             return res.status(400).json({
                 status: "failed",
-                message: "Provide valid fields: title, description, order, or status."
+                message: "Provide valid fields: title, description, order, status, or resources."
             });
         }
 
@@ -189,6 +190,18 @@ const updateChapter = async (req, res) => {
             }
 
             updates.status = status;
+        }
+
+        // resources
+        if (resources !== undefined) {
+            if (!Array.isArray(resources)) {
+                return res.status(400).json({
+                    status: "failed",
+                    message: "Resources must be an array."
+                });
+            }
+
+            updates.resources = resources;
         }
 
         // Ownership check: only the creator can update this chapter

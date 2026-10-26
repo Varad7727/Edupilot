@@ -1,5 +1,51 @@
 const mongoose = require("mongoose");
 
+const resourceSchema = new mongoose.Schema(
+    {
+        title: {
+            type: String,
+            required: true,
+            trim: true,
+            maxlength: 150,
+        },
+        type: {
+            type: String,
+            enum: ["pdf", "video", "image"],
+            required: true,
+        },
+        url: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+        fileId: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+        filePath: {
+            type: String,
+            default: "",
+            trim: true,
+        },
+        mimeType: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+        size: {
+            type: Number,
+            required: true,
+            min: 1,
+        },
+        uploadedAt: {
+            type: Date,
+            default: Date.now,
+        },
+    },
+    { _id: true }
+);
+
 const chapterSchema = new mongoose.Schema(
     {
         title: {
@@ -41,6 +87,11 @@ const chapterSchema = new mongoose.Schema(
             type: String,
             enum: ["draft", "published"],
             default: "draft"
+        },
+
+        resources: {
+            type: [resourceSchema],
+            default: []
         },
 
         isArchived: {

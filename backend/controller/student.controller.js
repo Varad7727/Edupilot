@@ -3,13 +3,15 @@ const CourseEnrollment = require("../model/enrollment.model.js");
 const Subject = require("../model/subject.model.js");
 const Chapter = require("../model/chapter.model.js");
 const Lesson = require("../model/lesson.model.js");
+const StudentDppAttempt = require("../model/studentDppAttempt.model.js");
+
 // GET /students/dashboard
 const getStudentDashboard = async (req, res) => {
     try {
         // Get the authenticated student's safe profile
         const student = await studentModel.findById(req.student._id)
             .select("firstName lastName email createdAt")
-            .lean()
+            .lean();
 
         if (!student) {
             return res.status(404).json({
@@ -23,20 +25,16 @@ const getStudentDashboard = async (req, res) => {
             student: student._id,
             status: "active"
         })
-
-            // The course field contains only a MongoDB reference, not the course's full details.
-            // With.populate(), Mongoose fetches the referenced course and replaces that reference in the returned result with the course //document.
-
             .populate({
                 path: "course",
                 select: "name code description classLevel isActive"
             })
             .sort({ enrolledAt: -1 })
-            .lean()
+            .lean();
 
-        // Exclude courses that are no longer active.
+        // Exclude courses that are explicitly deactivated.
         const enrolledCourses = enrollments
-            .filter(item => item.course && item.course.isActive)
+            .filter(item => item.course && item.course.isActive !== false)
             .map(item => ({
                 _id: item.course._id,
                 name: item.course.name,
@@ -44,7 +42,7 @@ const getStudentDashboard = async (req, res) => {
                 description: item.course.description,
                 classLevel: item.course.classLevel,
                 enrolledAt: item.enrolledAt
-            }))
+            }));
 
         const courseIds = enrolledCourses.map(course => course._id);
 
@@ -65,7 +63,7 @@ const getStudentDashboard = async (req, res) => {
             status: "published",
             isArchived: false
         })
-            .select("title description subjectId order")
+            .select("title description subjectId order resources")
             .sort({ order: 1 })
             .lean();
 
@@ -77,9 +75,22 @@ const getStudentDashboard = async (req, res) => {
             status: "published",
             isArchived: false
         })
-            .select("title chapterId order estimatedDuration difficulty")
+            .select("title description chapterId order estimatedDuration difficulty resources")
             .sort({ order: 1 })
             .lean();
+
+        // Query student's recent DPP test attempts
+        const [recentAttempts, totalDppAttempts] = await Promise.all([
+            StudentDppAttempt.find({ student: student._id })
+                .populate("dpp", "title totalMarks durationMinutes")
+                .sort({ submittedAt: -1, createdAt: -1 })
+                .limit(5)
+                .lean(),
+            StudentDppAttempt.countDocuments({
+                student: student._id,
+                status: { $in: ["SUBMITTED", "AUTO_SUBMITTED"] }
+            })
+        ]);
 
         // Assemble the course -> subject -> chapter -> lesson hierarchy.
         const courseOverview = enrolledCourses.map(course => {
@@ -112,28 +123,31 @@ const getStudentDashboard = async (req, res) => {
                 subjects: courseSubjects
             };
         });
-       return res.status(200).json({
-    status: "success",
-    message: "Student dashboard retrieved successfully.",
-    data: {
-        profile: {
-            id: student._id,
-            firstName: student.firstName,
-            lastName: student.lastName,
-            fullName: `${student.firstName} ${student.lastName}`,
-            email: student.email,
-            joinedAt: student.createdAt
-        },
-        summary: {
-            enrolledCourses: enrolledCourses.length,
-            subjects: subjects.length,
-            chapters: chapters.length,
-            lessons: lessons.length
-        },
-        enrolledCourses,
-        courseOverview
-    }
-});
+
+        return res.status(200).json({
+            status: "success",
+            message: "Student dashboard retrieved successfully.",
+            data: {
+                profile: {
+                    id: student._id,
+                    firstName: student.firstName,
+                    lastName: student.lastName,
+                    fullName: `${student.firstName} ${student.lastName}`,
+                    email: student.email,
+                    joinedAt: student.createdAt
+                },
+                summary: {
+                    enrolledCourses: enrolledCourses.length,
+                    subjects: subjects.length,
+                    chapters: chapters.length,
+                    lessons: lessons.length,
+                    dppAttempts: totalDppAttempts
+                },
+                enrolledCourses,
+                courseOverview,
+                recentAttempts
+            }
+        });
     } catch (error) {
         console.error("Get student dashboard error:", error);
 
@@ -142,8 +156,8 @@ const getStudentDashboard = async (req, res) => {
             message: "Unable to retrieve student dashboard."
         });
     }
-}
+};
 
 module.exports = {
     getStudentDashboard
-}
+};

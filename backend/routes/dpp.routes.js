@@ -10,7 +10,8 @@ const {
     updateQuestionInDPP,
     removeQuestionFromDPP,
     reorderDPPQuestions,
-    publishDPP
+    publishDPP,
+    getTeacherStudentAttempts
 } = require("../controller/dpp.controller");
 
 const { authTeacherMiddleware } = require("../middleware/auth.middleware");
@@ -18,6 +19,7 @@ const { authTeacherMiddleware } = require("../middleware/auth.middleware");
 // All routes require teacher authentication.
 router.post("/", authTeacherMiddleware, createDPP);
 router.get("/", authTeacherMiddleware, getTeacherDPPs);
+router.get("/analytics/attempts", authTeacherMiddleware, getTeacherStudentAttempts);
 router.get("/:dppId", authTeacherMiddleware, getDPPById);
 router.patch("/:dppId", authTeacherMiddleware, updateDPP);
 router.post(

@@ -17,6 +17,7 @@ const editableFields = [
     "topics",
     "tags",
     "prerequisites",
+    "resources",
     "aiContext"
 ];
 
@@ -67,7 +68,7 @@ const getOwnedChapter = async (chapterId, teacherId) => {
 const createLesson = async (req, res) => {
     try {
         const {
-            title, description, chapterId, order, estimatedDuration, difficulty, learningObjectives, topics, tags, prerequisites, aiContext
+            title, description, chapterId, order, estimatedDuration, difficulty, learningObjectives, topics, tags, prerequisites, resources, aiContext
         } = req.body;
         if (!title || !description || !chapterId || !order) {
             return res.status(400).json({
@@ -144,49 +145,45 @@ const createLesson = async (req, res) => {
                 message: "Chapter not found or access denied."
             });
         }
-        // Prerequisites must be valid, existing lessons.
-        //it should beb array
-        if (prerequisites !== undefined) {
+        // Prerequisites must be valid, existing lessons (if provided).
+        let validPrereqs = [];
+        if (prerequisites !== undefined && prerequisites !== null) {
             if (!Array.isArray(prerequisites)) {
                 return res.status(400).json({
                     status: "failed",
                     message: "Prerequisites must be an array."
                 });
             }
-        }
-        //atleast one should be from prerequisites
-        if (prerequisites.some(
-            id => !mongoose.isValidObjectId(id)
-        )) {
-            return res.status(400).json({
-                status: "failed",
-                message: "A prerequisite lesson ID is invalid."
+            if (prerequisites.some(id => !mongoose.isValidObjectId(id))) {
+                return res.status(400).json({
+                    status: "failed",
+                    message: "A prerequisite lesson ID is invalid."
+                });
+            }
+
+            const uniqueIds = [...new Set(prerequisites.map(String))];
+            if (uniqueIds.length !== prerequisites.length) {
+                return res.status(400).json({
+                    status: "failed",
+                    message: "Duplicate prerequisites are not allowed."
+                });
+            }
+
+            const existingLessons = await lessonModel.countDocuments({
+                _id: { $in: prerequisites },
+                createdBy: req.teacher._id,
+                isArchived: false
             });
+
+            if (existingLessons !== prerequisites.length) {
+                return res.status(400).json({
+                    status: "failed",
+                    message: "One or more prerequisite lessons do not exist or are inaccessible."
+                });
+            }
+            validPrereqs = prerequisites;
         }
 
-        const uniqueIds = [...new Set(
-            prerequisites.map(String)
-        )];
-
-        if (uniqueIds.length !== prerequisites.length) {
-            return res.status(400).json({
-                status: "failed",
-                message: "Duplicate prerequisites are not allowed."
-            });
-        }
-
-        const existingLessons = await lessonModel.countDocuments({
-            _id: { $in: prerequisites },
-            createdBy: req.teacher._id,
-            isArchived: false
-        })
-
-        if (existingLessons !== prerequisites.length) {
-            return res.status(400).json({
-                status: "failed",
-                message: "One or more prerequisite lessons do not exist or are inaccessible."
-            });
-        }
         const lesson = await lessonModel.create({
             title: title.trim(),
             description: description?.trim() || "",
@@ -198,7 +195,8 @@ const createLesson = async (req, res) => {
             learningObjectives,
             topics,
             tags,
-            prerequisites,
+            prerequisites: validPrereqs,
+            resources: Array.isArray(resources) ? resources : [],
             aiContext
         });
         return res.status(201).json({
@@ -526,6 +524,16 @@ const updateLesson = async (req, res) => {
             updates.prerequisites = ids;
         }
 
+        // Validate resources
+        if (updates.resources !== undefined) {
+            if (!Array.isArray(updates.resources)) {
+                return res.status(400).json({
+                    status: "failed",
+                    message: "Resources must be an array."
+                });
+            }
+        }
+
         // Detect changes that require AI reprocessing
         const aiRelevantFields = [
             "title",
@@ -835,7 +843,7 @@ const getPublishedLessonsByChapter = async (req, res) => {
             isArchived: false
         })
             .select(
-                "title description chapterId order estimatedDuration difficulty learningObjectives topics tags publishedAt"
+                "title description chapterId order estimatedDuration difficulty learningObjectives topics tags publishedAt resources"
             )
             .sort({ order: 1 })
             .lean();
